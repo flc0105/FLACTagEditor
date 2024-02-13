@@ -1,10 +1,12 @@
 import os
 import sys
 
+from PyQt5 import QtWidgets
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QDropEvent
 from PyQt5.QtWidgets import QAbstractItemView, QApplication, QWidget, QVBoxLayout, QTableWidget, QTableWidgetItem, \
-    QHeaderView, QListWidget, QPushButton, QFileDialog, QMessageBox, QDesktopWidget, QAction, QMenu
+    QHeaderView, QListWidget, QPushButton, QFileDialog, QMessageBox, QDesktopWidget, QAction, QMenu, QHBoxLayout, \
+    QDialog, QLabel, QLineEdit, QDialogButtonBox
 from mutagen.flac import FLAC
 
 
@@ -100,6 +102,13 @@ class FLACTagEditor(QWidget):
         self.table.setColumnWidth(0, 300)
         self.table.setColumnWidth(1, 450)
 
+
+        self.add_button = QPushButton('Add', self)
+        self.add_button.clicked.connect(self.addTableRow)
+
+        self.delete_button = QPushButton('Delete', self)
+        self.delete_button.clicked.connect(self.deleteTableRow)
+
         self.save_button = QPushButton('Save', self)
         self.save_button.clicked.connect(self.saveFLAC)
 
@@ -107,7 +116,14 @@ class FLACTagEditor(QWidget):
         layout.addWidget(self.import_button)
         layout.addWidget(self.list_widget)
         layout.addWidget(self.table)
-        layout.addWidget(self.save_button)
+        # layout.addWidget(self.save_button)
+
+        buttons_layout = QHBoxLayout()
+        buttons_layout.addWidget(self.add_button)
+        buttons_layout.addWidget(self.delete_button)
+        buttons_layout.addWidget(self.save_button)
+
+        layout.addLayout(buttons_layout)
 
         self.setLayout(layout)
 
@@ -159,6 +175,61 @@ class FLACTagEditor(QWidget):
     def isFLAC(self, filepath):
         _, ext = os.path.splitext(filepath)
         return ext.lower() == ".flac"
+
+    # def addTableRow(self):
+    #     dialog = AddRowDialog(self)
+    #     if dialog.exec_():
+    #         field_name = dialog.field_name.text()
+    #         value = dialog.value.text()
+    #
+    #         row_count = self.table.rowCount()
+    #         self.table.insertRow(row_count)
+    #         self.table.setItem(row_count, 0, QTableWidgetItem(field_name))
+    #         self.table.setItem(row_count, 1, QTableWidgetItem(value))
+
+    def addTableRow(self):
+        row_count = self.table.rowCount()
+        self.table.insertRow(row_count)
+        self.table.setItem(row_count, 0, QTableWidgetItem(""))
+        self.table.setItem(row_count, 1, QTableWidgetItem(""))
+        self.table.setCurrentCell(row_count, 0)  # 设置焦点到新行的"Field Name"列
+
+        item = self.table.item(row_count, 0)
+        if item:
+            self.table.editItem(item)  # 进入编辑状态
+            self.table.scrollToItem(item, QtWidgets.QAbstractItemView.PositionAtTop)  # 滚动到可见区域
+
+    def deleteTableRow(self):
+        selected_rows = self.table.selectionModel().selectedRows()
+        for row in reversed(selected_rows):
+            self.table.removeRow(row.row())
+
+
+class AddRowDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        self.setWindowTitle("Add Row")
+        self.initUI()
+
+    def initUI(self):
+        self.field_name_label = QLabel("Field Name:")
+        self.field_name = QLineEdit()
+        self.value_label = QLabel("Value:")
+        self.value = QLineEdit()
+
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+
+        layout = QVBoxLayout()
+        layout.addWidget(self.field_name_label)
+        layout.addWidget(self.field_name)
+        layout.addWidget(self.value_label)
+        layout.addWidget(self.value)
+        layout.addWidget(button_box)
+
+        self.setLayout(layout)
 
 
 class DropList(QListWidget):
