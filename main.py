@@ -2,10 +2,11 @@ import datetime
 import hashlib
 import os
 import sys
+from collections import Counter
 
 from PyQt5 import QtWidgets
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QDropEvent
+from PyQt5.QtGui import QDropEvent, QBrush, QColor
 from PyQt5.QtWidgets import QAbstractItemView, QApplication, QWidget, QVBoxLayout, QTableWidget, QTableWidgetItem, \
     QHeaderView, QListWidget, QPushButton, QFileDialog, QMessageBox, QDesktopWidget, QHBoxLayout, \
     QLineEdit, QCheckBox
@@ -111,6 +112,9 @@ class DropList(QListWidget):
         # Enable accepting drops.
         self.setAcceptDrops(True)
 
+        # 支持多选
+        self.setSelectionMode(QAbstractItemView.ExtendedSelection)
+
     def dragEnterEvent(self, event):
         """Handle drag enter event."""
         # Check if the event contains URLs.
@@ -188,7 +192,7 @@ class FLACTagEditor(QWidget):
         # Create a button for deleting selected files.
         self.delete_button = QPushButton('Delete', self)
         self.delete_button.clicked.connect(self.deleteSelectedFiles)
-        self.delete_button.setEnabled(False)  # Initially disable the delete button.
+        # self.delete_button.setEnabled(False)  # Initially disable the delete button.
 
         # Create a button for clearing the list.
         self.clear_button = QPushButton('Clear', self)
@@ -377,35 +381,84 @@ class FLACTagEditor(QWidget):
         if selected_items:
             for item in selected_items:
                 self.list_widget.takeItem(self.list_widget.row(item))
-        self.updateDeleteSelectedButtonState()
+        else:
+            QMessageBox.warning(self, "Warning", "Please select a FLAC file first.")
+        # self.updateDeleteSelectedButtonState()
 
-    def updateDeleteSelectedButtonState(self):
-        """Update the state of the delete button based on whether items are selected."""
-        selected_items = self.list_widget.selectedItems()
-        self.delete_button.setEnabled(bool(selected_items))
+    # def updateDeleteSelectedButtonState(self):
+    #     """Update the state of the delete button based on whether items are selected."""
+    #     selected_items = self.list_widget.selectedItems()
+    #     self.delete_button.setEnabled(bool(selected_items))
 
     def clearList(self):
         """Clear all items from the list."""
         # Clear the list
         self.list_widget.clear()
         # Update the state of the delete button
-        self.updateDeleteSelectedButtonState()  # 更新删除按钮状态
+        # self.updateDeleteSelectedButtonState()  # 更新删除按钮状态
 
     def showTags(self):
         """Show tags of the selected FLAC file."""
         selected_items = self.list_widget.selectedItems()
         if selected_items:
-            filepath = selected_items[0].text()
-            try:
-                self.metadata = FLAC(filepath).tags
-                self.populateTable()
-            except Exception as e:
-                QMessageBox.critical(self, "Error", f"Failed to read tags from {filepath}: {str(e)}")
-                self.table.setRowCount(0)
+
+            if len(selected_items) == 1:
+                filepath = selected_items[0].text()
+                try:
+                    self.metadata = FLAC(filepath).tags
+                    self.populateTable()
+                except Exception as e:
+                    QMessageBox.critical(self, "Error", f"Failed to read tags from {filepath}: {str(e)}")
+                    self.table.setRowCount(0)
+            else:
+                # 用于存储各个文件的标签字段及其顺序的列表
+                tag_fields = []
+
+                # 遍历选中的文件，获取每个文件的标签字段及其顺序
+                for item in selected_items:
+                    filepath = item.text()
+                    flac = FLAC(filepath)
+                    tag_fields.append([key for key, _ in flac.tags])
+
+                # 检查标签字段列表是否完全相同（包括顺序）
+                is_same_tags = all(tag_fields[0] == tag_list for tag_list in tag_fields)
+
+                if not is_same_tags:
+                    QMessageBox.critical(self, "Error", "Selected files have different tag fields or orders.")
+                    self.list_widget.clearSelection()
+                    return
+
+                # 清空表格并设置行数
+                self.table.setRowCount(len(tag_fields[0]))
+
+                # 填充表格
+                for row, tag in enumerate(tag_fields[0]):
+                    # 设置标签名称
+                    field_item = QTableWidgetItem(tag)
+                    self.table.setItem(row, 0, field_item)
+
+                    # 获取所有文件中相同标签的值
+                    values = []
+                    for item in selected_items:
+                        filepath = item.text()
+                        flac = FLAC(filepath)
+                        file_value = flac.tags.get(tag, [''])[0]
+                        values.append(file_value)
+
+                    # 检查所有值是否相同
+                    if len(set(values)) == 1:
+                        value_item = QTableWidgetItem(values[0])
+                    else:
+                        value_item = QTableWidgetItem("<Will Not Change>")
+                        value_item.setForeground(QBrush(QColor(128, 128, 128)))  # 设置文本颜色为灰色
+
+                    self.table.setItem(row, 1, value_item)
+
+
         else:
             self.table.setRowCount(0)
 
-        self.updateDeleteSelectedButtonState()
+        # self.updateDeleteSelectedButtonState()
 
     def populateTable(self):
         """Populate the table with FLAC metadata."""
@@ -482,9 +535,77 @@ class FLACTagEditor(QWidget):
         else:
             self.padding_lineedit.setEnabled(False)
 
+    # def saveFLAC(self):
+    #     """Save metadata to a FLAC file."""
+    #
+    #     metadata_dict = {}
+    #
+    #     # Iterate over rows in the table
+    #     for row in range(self.table.rowCount()):
+    #         # Get the item in the "Field Name" column
+    #         field_name_item = self.table.item(row, 0)
+    #         # Get the item in the "Value" column
+    #         value_item = self.table.item(row, 1)
+    #         # If both items exist
+    #         if field_name_item and value_item:
+    #             # Get the text of the "Field Name" item
+    #             field_name = field_name_item.text()
+    #             # Get the text of the "Value" item
+    #             value = value_item.text()
+    #             # Add the field name and value to the metadata dictionary
+    #             metadata_dict[field_name] = value
+    #
+    #     # Check if padding is enabled
+    #     use_padding = self.use_padding_checkbox.isChecked()
+    #
+    #     # Check if padding is enabled and the padding value is valid
+    #     if use_padding:
+    #         padding_value = self.padding_lineedit.text()
+    #         if not padding_value or not padding_value.isdigit():
+    #             QMessageBox.critical(self, "Error",
+    #                                  "Padding value must be a non-empty number when 'Use New Padding' is checked.")
+    #             return
+    #
+    #     # Get selected items from the list widget
+    #     selected_items = self.list_widget.selectedItems()
+    #     if selected_items:
+    #         # Get the filepath of the selected item
+    #         filepath = selected_items[0].text()
+    #         try:
+    #             # Open the FLAC file
+    #             flac = File(filepath)
+    #
+    #             # Clear existing tags
+    #             if flac.tags:
+    #                 flac.tags.clear()
+    #
+    #             # Set metadata tags
+    #             for k, v in metadata_dict.items():
+    #                 flac[k] = v
+    #
+    #             if use_padding:
+    #                 # Save FLAC file with new padding
+    #                 flac.save(padding=self.new_padding)
+    #             else:
+    #                 # Save FLAC file without new padding
+    #                 flac.save()
+    #             # Display success message
+    #             QMessageBox.information(self, "Success", "Tags saved successfully.")
+    #         except Exception as e:
+    #             QMessageBox.critical(self, "Error", f"Failed to save tags to {filepath}: {str(e)}")
+    #             self.table.setRowCount(0)  # Clear the table
+    #             return
+    #     else:
+    #         QMessageBox.warning(self, "Warning", "Please select a FLAC file first.")
+    #         return
+
     def saveFLAC(self):
         """Save metadata to a FLAC file."""
 
+        # Dictionary to store original tag values
+        original_tag_values = {}
+
+        # Dictionary to store metadata
         metadata_dict = {}
 
         # Iterate over rows in the table
@@ -516,26 +637,43 @@ class FLACTagEditor(QWidget):
         # Get selected items from the list widget
         selected_items = self.list_widget.selectedItems()
         if selected_items:
-            # Get the filepath of the selected item
-            filepath = selected_items[0].text()
+
             try:
-                # Open the FLAC file
-                flac = File(filepath)
+                for item in selected_items:
+                    filepath = item.text()
+                    flac = File(filepath)
+                    original_tag_values[filepath] = {tag: flac[tag] for tag in metadata_dict if flac.get(tag)}
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to read tags from {filepath}: {str(e)}")
+                return
 
-                # Clear existing tags
-                if flac.tags:
-                    flac.tags.clear()
+            try:
+                # Iterate over selected files
+                for item in selected_items:
+                    filepath = item.text()
+                    flac = File(filepath)
 
-                # Set metadata tags
-                for k, v in metadata_dict.items():
-                    flac[k] = v
+                    # Clear existing tags
+                    if flac.tags:
+                        flac.tags.clear()
 
-                if use_padding:
-                    # Save FLAC file with new padding
-                    flac.save(padding=self.new_padding)
-                else:
-                    # Save FLAC file without new padding
-                    flac.save()
+                    # Set metadata tags
+                    for k, v in metadata_dict.items():
+                        # Only update tags with values that are not "<Will Not Change>"
+                        if v == "<Will Not Change>":
+                            # Restore original value
+                            if filepath in original_tag_values and k in original_tag_values[filepath]:
+                                flac[k] = original_tag_values[filepath][k]
+                        else:
+                            flac[k] = v
+
+                    if use_padding:
+                        # Save FLAC file with new padding
+                        flac.save(padding=self.new_padding)
+                    else:
+                        # Save FLAC file without new padding
+                        flac.save()
+
                 # Display success message
                 QMessageBox.information(self, "Success", "Tags saved successfully.")
             except Exception as e:
