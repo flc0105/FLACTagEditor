@@ -1,3 +1,5 @@
+import datetime
+import hashlib
 import os
 import sys
 
@@ -6,7 +8,7 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QDropEvent
 from PyQt5.QtWidgets import QAbstractItemView, QApplication, QWidget, QVBoxLayout, QTableWidget, QTableWidgetItem, \
     QHeaderView, QListWidget, QPushButton, QFileDialog, QMessageBox, QDesktopWidget, QAction, QMenu, QHBoxLayout, \
-    QDialog, QLabel, QLineEdit, QDialogButtonBox
+    QDialog, QLabel, QLineEdit, QDialogButtonBox, QCheckBox
 from mutagen.flac import FLAC
 
 
@@ -91,6 +93,23 @@ class FLACTagEditor(QWidget):
         self.import_button = QPushButton('Import FLAC File', self)
         self.import_button.clicked.connect(self.importFLAC)
 
+        self.info_button = QPushButton('Show FLAC Info', self)
+        self.info_button.clicked.connect(self.showFLACInfo)
+
+        self.delete_selected_button = QPushButton('Delete Selected', self)
+        self.delete_selected_button.clicked.connect(self.deleteSelectedFiles)
+        self.delete_selected_button.setEnabled(False)  # 初始状态禁用
+
+        self.clear_button = QPushButton('Clear', self)
+        self.clear_button.clicked.connect(self.clearList)
+
+
+        button_layout = QHBoxLayout()
+        button_layout.addWidget(self.import_button)
+        button_layout.addWidget(self.info_button)
+        button_layout.addWidget(self.delete_selected_button)
+        button_layout.addWidget(self.clear_button)
+
         self.list_widget = DropList(self)
         self.list_widget.setAcceptDrops(True)
         self.list_widget.setFixedHeight(150)
@@ -102,7 +121,7 @@ class FLACTagEditor(QWidget):
         self.table.setColumnWidth(0, 300)
         self.table.setColumnWidth(1, 450)
 
-
+        # 创建添加、删除和保存按钮
         self.add_button = QPushButton('Add', self)
         self.add_button.clicked.connect(self.addTableRow)
 
@@ -112,22 +131,131 @@ class FLACTagEditor(QWidget):
         self.save_button = QPushButton('Save', self)
         self.save_button.clicked.connect(self.saveFLAC)
 
+        # 创建复选框和单行文本框
+        self.use_padding_checkbox = QCheckBox('Use New Padding', self)
+        self.padding_lineedit = QLineEdit(self)
+        self.padding_lineedit.setPlaceholderText("Enter padding value")
+        self.padding_lineedit.setEnabled(False)  # 初始状态禁用
+
+        # 为复选框的状态切换设置事件处理函数
+        self.use_padding_checkbox.stateChanged.connect(self.updatePaddingLineEditState)
+
+        # 创建布局并添加控件
         layout = QVBoxLayout()
-        layout.addWidget(self.import_button)
+        layout.addLayout(button_layout)
         layout.addWidget(self.list_widget)
         layout.addWidget(self.table)
-        # layout.addWidget(self.save_button)
 
+        # 创建水平布局来放置添加和删除按钮
+        buttons_layout_left = QHBoxLayout()
+        buttons_layout_left.addWidget(self.add_button)
+        buttons_layout_left.addWidget(self.delete_button)
+
+        # 创建水平布局来放置复选框和文本框以及保存按钮
+        buttons_layout_right = QHBoxLayout()
+        buttons_layout_right.addWidget(self.use_padding_checkbox)
+        buttons_layout_right.addWidget(self.padding_lineedit)
+        buttons_layout_right.addWidget(self.save_button)
+
+        # 创建水平布局用于将左侧按钮和右侧控件放在一起
         buttons_layout = QHBoxLayout()
-        buttons_layout.addWidget(self.add_button)
-        buttons_layout.addWidget(self.delete_button)
-        buttons_layout.addWidget(self.save_button)
+        buttons_layout.addLayout(buttons_layout_left)
+        buttons_layout.addStretch(1)  # 添加弹簧，使右侧控件靠右对齐
+        buttons_layout.addLayout(buttons_layout_right)
 
+        # 将按钮布局添加到主垂直布局中
         layout.addLayout(buttons_layout)
 
         self.setLayout(layout)
 
+
         self.list_widget.itemSelectionChanged.connect(self.showSelectedFLACInfo)
+
+    def showFLACInfo(self):
+        selected_items = self.list_widget.selectedItems()
+        if selected_items:
+            filepath = selected_items[0].text()
+
+            # Call the code to get FLAC information
+            file_hash, md5, sample_rate, bits_per_sample, length, padding_length, vendor_string = self.getFLACInfo(
+                filepath)
+
+            # Construct the message to display
+            msg_text = f'File Hash: {file_hash}\nAudio MD5: {md5}\nSample Rate: {sample_rate} kHz\nBits Per Sample: {bits_per_sample}\nLength: {length}\n'
+            msg_text += f'Padding Length: {padding_length}\nVendor String: {vendor_string}\n'
+
+            # Display the message in a QMessageBox
+            msg = QMessageBox()
+            msg.setWindowTitle("FLAC Information")
+            msg.setText(msg_text)
+            msg.exec_()
+        else:
+            QMessageBox.warning(self, "Warning", "Please select a FLAC file first.")
+
+    def getFLACInfo(self, filepath):
+        # Initialize variables to store FLAC information
+        file_hash = ''
+        md5 = ''
+        sample_rate = ''
+        bits_per_sample = ''
+        length = ''
+
+        padding_length = ''
+        vendor_string = ''
+
+        try:
+            # Calculate file hash
+            file_hash = get_hash(filepath)
+
+            # Read FLAC file
+            flac = FLAC(filepath)
+            info = flac.info
+
+            # Get FLAC file information
+            md5 = hex(info.md5_signature).split('x')[-1]
+            sample_rate = info.sample_rate / 1000
+            bits_per_sample = info.bits_per_sample
+            length = format_seconds(info.length)
+
+            # Get padding length
+            for block in flac.metadata_blocks:
+                if block.code == 1:
+                    padding_length = block.length
+
+            # Get vendor string
+            try:
+                vendor_string = flac.tags.vendor
+            except:
+                vendor_string = '获取失败'
+
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to read FLAC information: {str(e)}")
+
+        # Return FLAC information
+        return file_hash, md5, sample_rate, bits_per_sample, length, padding_length, vendor_string
+
+    def updatePaddingLineEditState(self, state):
+        # 根据复选框状态设置单行文本框的启用状态
+        if state == Qt.Checked:
+            self.padding_lineedit.setEnabled(True)
+        else:
+            self.padding_lineedit.setEnabled(False)
+
+    def deleteSelectedFiles(self):
+        selected_items = self.list_widget.selectedItems()
+        if selected_items:
+            for item in selected_items:
+                self.list_widget.takeItem(self.list_widget.row(item))
+        self.updateDeleteSelectedButtonState()
+
+    def updateDeleteSelectedButtonState(self):
+        selected_items = self.list_widget.selectedItems()
+        self.delete_selected_button.setEnabled(bool(selected_items))
+
+    def clearList(self):
+        self.list_widget.clear()  # 清空列表
+        self.updateDeleteSelectedButtonState()  # 更新删除按钮状态
+
 
     def showSelectedFLACInfo(self):
         selected_items = self.list_widget.selectedItems()
@@ -143,6 +271,8 @@ class FLACTagEditor(QWidget):
                 self.table.setRowCount(0)
         else:
             self.table.setRowCount(0)
+
+        self.updateDeleteSelectedButtonState()  # 更新删除按钮的状态
 
     def populateTable(self):
         self.table.setRowCount(len(self.metadata))
@@ -171,6 +301,40 @@ class FLACTagEditor(QWidget):
     def saveFLAC(self):
         # Here you should implement a function to save the edited metadata
         print("save")
+        metadata_dict = {}
+        for row in range(self.table.rowCount()):
+            field_name_item = self.table.item(row, 0)
+            value_item = self.table.item(row, 1)
+            if field_name_item and value_item:
+                field_name = field_name_item.text()
+                value = value_item.text()
+                metadata_dict[field_name] = value
+
+        # 使用QMessageBox显示字典内容
+        msg = QMessageBox()
+        msg.setWindowTitle("Metadata Dictionary")
+
+        # 检查复选框状态，根据需要显示单行文本框的内容
+        use_padding = self.use_padding_checkbox.isChecked()
+
+        # 如果复选框被勾选但是单行文本框为空或者不是数字，报错
+        if use_padding:
+            padding_value = self.padding_lineedit.text()
+            if not padding_value or not padding_value.isdigit():
+                QMessageBox.critical(self, "Error",
+                                     "Padding value must be a non-empty number when 'Use New Padding' is checked.")
+                return
+
+        padding_value = self.padding_lineedit.text() if use_padding else "Not used"
+
+        # 提示框中显示是否勾选了新padding选项以及相应的数值
+        msg = QMessageBox()
+        msg.setWindowTitle("Metadata Dictionary")
+        msg_text = f"Use New Padding: {use_padding}\nPadding Value: {padding_value}\n\n{metadata_dict}"
+        msg.setText(msg_text)
+        msg.exec_()
+        # msg.setText(str(metadata_dict))
+        # msg.exec_()
 
     def isFLAC(self, filepath):
         _, ext = os.path.splitext(filepath)
@@ -278,6 +442,22 @@ class DropList(QListWidget):
                 else:
                     print(f"{filepath} is not a FLAC file. Skipping.")
             event.acceptProposedAction()
+
+
+def get_hash(filename):
+    with open(filename, 'rb') as f:
+        file_hash = hashlib.md5()
+        while chunk := f.read(8192):
+            file_hash.update(chunk)
+        return file_hash.hexdigest()
+
+
+def format_seconds(seconds):
+    td = datetime.timedelta(seconds=seconds)
+    hours, remainder = divmod(td.seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    time_str = f'{hours:02}:{minutes:02}:{seconds:02}'
+    return time_str
 
 
 if __name__ == '__main__':
