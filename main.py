@@ -156,6 +156,15 @@ class FLACTagEditor(QWidget):
         super().__init__()
         self.initUI()
 
+        # 如果以命令行执行并附带文件路径参数，则将文件添加到列表中
+        if len(sys.argv) > 1:
+            file_paths = sys.argv[1:]
+            for file_path in file_paths:
+                if self.isFLAC(file_path):
+                    self.list_widget.addItem(file_path)
+                else:
+                    print(f"{file_path} is not a FLAC file. Skipping.")
+
     def initUI(self):
 
         # Set the window title.
