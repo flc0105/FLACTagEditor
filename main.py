@@ -1,9 +1,10 @@
+import os
 import sys
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QDropEvent
 from PyQt5.QtWidgets import QAbstractItemView, QApplication, QWidget, QVBoxLayout, QTableWidget, QTableWidgetItem, \
-    QHeaderView, QListWidget, QPushButton, QFileDialog
+    QHeaderView, QListWidget, QPushButton, QFileDialog, QMessageBox, QDesktopWidget, QAction, QMenu
 from mutagen.flac import FLAC
 
 
@@ -74,22 +75,30 @@ class FLACTagEditor(QWidget):
         super().__init__()
         self.initUI()
 
+    def center(self):
+        qr = self.frameGeometry()
+        cp = QDesktopWidget().availableGeometry().center()
+        qr.moveCenter(cp)
+        self.move(qr.topLeft())
+
     def initUI(self):
         self.setWindowTitle('FLAC Tag Editor')
-        self.setGeometry(100, 100, 600, 400)
+        self.setGeometry(100, 100, 800, 600)  # 表示窗口左上角的 x 坐标、y 坐标，以及窗口的宽度和高度
+        self.center()
 
         self.import_button = QPushButton('Import FLAC File', self)
         self.import_button.clicked.connect(self.importFLAC)
 
         self.list_widget = DropList(self)
         self.list_widget.setAcceptDrops(True)
+        self.list_widget.setFixedHeight(150)
 
         self.table = TableWidgetDragRows(self)
         self.table.setColumnCount(2)
         self.table.verticalHeader().setVisible(False)
         self.table.setHorizontalHeaderLabels(['Field Name', 'Value'])
         self.table.setColumnWidth(0, 300)
-        self.table.setColumnWidth(1, 300)
+        self.table.setColumnWidth(1, 450)
 
         self.save_button = QPushButton('Save', self)
         self.save_button.clicked.connect(self.saveFLAC)
@@ -108,8 +117,14 @@ class FLACTagEditor(QWidget):
         selected_items = self.list_widget.selectedItems()
         if selected_items:
             filepath = selected_items[0].text()
-            self.metadata = FLAC(filepath).tags
-            self.populateTable()
+            # self.metadata = FLAC(filepath).tags
+            # self.populateTable()
+            try:
+                self.metadata = FLAC(filepath).tags
+                self.populateTable()
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to read tags from {filepath}: {str(e)}")
+                self.table.setRowCount(0)
         else:
             self.table.setRowCount(0)
 
@@ -130,17 +145,44 @@ class FLACTagEditor(QWidget):
         filepaths, _ = QFileDialog.getOpenFileNames(self, 'Import FLAC Files', '', 'FLAC Files (*.flac)')
         if filepaths:
             for filepath in filepaths:
-                self.list_widget.addItem(filepath)
+                if self.isFLAC(filepath):
+                    self.list_widget.addItem(filepath)
+                else:
+                    print(f"{filepath} is not a FLAC file. Skipping.")
+            # for filepath in filepaths:
+            #     self.list_widget.addItem(filepath)
 
     def saveFLAC(self):
         # Here you should implement a function to save the edited metadata
         print("save")
+
+    def isFLAC(self, filepath):
+        _, ext = os.path.splitext(filepath)
+        return ext.lower() == ".flac"
 
 
 class DropList(QListWidget):
     def __init__(self, parent=None):
         super(DropList, self).__init__(parent)
         self.setAcceptDrops(True)
+
+        self.initContextMenu()  # 右键菜单
+
+    def initContextMenu(self):
+        self.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.customContextMenuRequested.connect(self.showContextMenu)
+
+        self.delete_action = QAction("Delete", self)
+        self.delete_action.triggered.connect(self.deleteSelectedItem)
+
+    def showContextMenu(self, pos):
+        menu = QMenu(self)
+        menu.addAction(self.delete_action)
+        menu.exec_(self.mapToGlobal(pos))
+
+    def deleteSelectedItem(self):
+        for item in self.selectedItems():
+            self.takeItem(self.row(item))
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls():
@@ -158,7 +200,12 @@ class DropList(QListWidget):
         md = event.mimeData()
         if md.hasUrls():
             for url in md.urls():
-                self.addItem(url.toLocalFile())
+                # self.addItem(url.toLocalFile())
+                filepath = url.toLocalFile()
+                if self.parent().isFLAC(filepath):
+                    self.addItem(filepath)
+                else:
+                    print(f"{filepath} is not a FLAC file. Skipping.")
             event.acceptProposedAction()
 
 
