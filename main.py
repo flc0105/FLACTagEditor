@@ -2,8 +2,8 @@ import sys
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QDropEvent
-from PyQt5.QtWidgets import QApplication, QWidget, QPushButton, QFileDialog, QVBoxLayout, QTableWidget, \
-    QTableWidgetItem, QHeaderView, QAbstractItemView
+from PyQt5.QtWidgets import QAbstractItemView, QApplication, QWidget, QVBoxLayout, QTableWidget, QTableWidgetItem, \
+    QHeaderView, QListWidget, QPushButton, QFileDialog
 from mutagen.flac import FLAC
 
 
@@ -81,8 +81,8 @@ class FLACTagEditor(QWidget):
         self.import_button = QPushButton('Import FLAC File', self)
         self.import_button.clicked.connect(self.importFLAC)
 
-        self.save_button = QPushButton('Save', self)
-        self.save_button.clicked.connect(self.saveFLAC)
+        self.list_widget = DropList(self)
+        self.list_widget.setAcceptDrops(True)
 
         self.table = TableWidgetDragRows(self)
         self.table.setColumnCount(2)
@@ -91,22 +91,27 @@ class FLACTagEditor(QWidget):
         self.table.setColumnWidth(0, 300)
         self.table.setColumnWidth(1, 300)
 
+        self.save_button = QPushButton('Save', self)
+        self.save_button.clicked.connect(self.saveFLAC)
+
         layout = QVBoxLayout()
         layout.addWidget(self.import_button)
+        layout.addWidget(self.list_widget)
         layout.addWidget(self.table)
         layout.addWidget(self.save_button)
 
         self.setLayout(layout)
 
-    def importFLAC(self):
-        filepath, _ = QFileDialog.getOpenFileName(self, 'Import FLAC File', '', 'FLAC Files (*.flac)')
-        if filepath:
+        self.list_widget.itemSelectionChanged.connect(self.showSelectedFLACInfo)
+
+    def showSelectedFLACInfo(self):
+        selected_items = self.list_widget.selectedItems()
+        if selected_items:
+            filepath = selected_items[0].text()
             self.metadata = FLAC(filepath).tags
             self.populateTable()
-
-    def saveFLAC(self):
-        # Here you should implement a function to save the edited metadata
-        pass
+        else:
+            self.table.setRowCount(0)
 
     def populateTable(self):
         self.table.setRowCount(len(self.metadata))
@@ -120,6 +125,41 @@ class FLACTagEditor(QWidget):
             row += 1
 
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
+
+    def importFLAC(self):
+        filepaths, _ = QFileDialog.getOpenFileNames(self, 'Import FLAC Files', '', 'FLAC Files (*.flac)')
+        if filepaths:
+            for filepath in filepaths:
+                self.list_widget.addItem(filepath)
+
+    def saveFLAC(self):
+        # Here you should implement a function to save the edited metadata
+        print("save")
+
+
+class DropList(QListWidget):
+    def __init__(self, parent=None):
+        super(DropList, self).__init__(parent)
+        self.setAcceptDrops(True)
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event):
+        md = event.mimeData()
+        if md.hasUrls():
+            for url in md.urls():
+                self.addItem(url.toLocalFile())
+            event.acceptProposedAction()
 
 
 if __name__ == '__main__':
