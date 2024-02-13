@@ -5,10 +5,10 @@ import sys
 
 from PyQt5 import QtWidgets
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QDropEvent, QPixmap
+from PyQt5.QtGui import QDropEvent
 from PyQt5.QtWidgets import QAbstractItemView, QApplication, QWidget, QVBoxLayout, QTableWidget, QTableWidgetItem, \
-    QHeaderView, QListWidget, QPushButton, QFileDialog, QMessageBox, QDesktopWidget, QAction, QMenu, QHBoxLayout, \
-    QDialog, QLabel, QLineEdit, QDialogButtonBox, QCheckBox, QSpacerItem, QSizePolicy
+    QHeaderView, QListWidget, QPushButton, QFileDialog, QMessageBox, QDesktopWidget, QHBoxLayout, \
+    QLineEdit, QCheckBox
 from mutagen import File
 from mutagen.flac import FLAC
 
@@ -17,11 +17,12 @@ class TableWidgetDragRows(QTableWidget):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        # set up on demand sorting
+        # Enable sorting indicators in the header.
         header = self.horizontalHeader()
         header.setSortIndicatorShown(True)
         header.sortIndicatorChanged.connect(self.sortItems)
 
+        # Enable drag and drop functionality.
         self.setDragEnabled(True)
         self.setAcceptDrops(True)
         self.viewport().setAcceptDrops(True)
@@ -32,47 +33,122 @@ class TableWidgetDragRows(QTableWidget):
         self.setDragDropMode(QAbstractItemView.InternalMove)
 
     def dropEvent(self, event: QDropEvent):
+        """Handle drop event."""
+
+        # If the event is not already handled and source is self.
         if not event.isAccepted() and event.source() == self:
+
+            # Get the drop row.
             drop_row = self.drop_on(event)
 
+            # Get the rows to move.
             rows = sorted(set(item.row() for item in self.selectedItems()))
             rows_to_move = [
                 [QTableWidgetItem(self.item(row_index, column_index)) for column_index in range(self.columnCount())]
                 for row_index in rows]
+
+            # Remove selected rows.
             for row_index in reversed(rows):
                 self.removeRow(row_index)
                 if row_index < drop_row:
                     drop_row -= 1
 
+            # Insert rows at the drop position.
             for row_index, data in enumerate(rows_to_move):
                 row_index += drop_row
                 self.insertRow(row_index)
                 for column_index, column_data in enumerate(data):
                     self.setItem(row_index, column_index, column_data)
+
+            # Accept the event.
             event.accept()
 
-            for row_index in range(len(rows_to_move)):  # maybe can be done smarter
+            # Select the moved rows.
+            for row_index in range(len(rows_to_move)):
                 for col in range(self.columnCount()):
                     self.item(drop_row + row_index, col).setSelected(True)
 
+        # Call the parent class dropEvent method.
         super().dropEvent(event)
 
     def drop_on(self, event):
+        """Determine where the drop occurred."""
+
+        # Get the index at drop position.
         index = self.indexAt(event.pos())
+
+        # Return the row count if the index is not valid.
         if not index.isValid():
             return self.rowCount()
+
+        # Return the row below the drop position if it is below the index; otherwise, return the index's row.
         return index.row() + 1 if self.is_below(event.pos(), index) else index.row()
 
     def is_below(self, pos, index):
+        """Check if the drop position is below the index."""
+
+        # Get visual rect of index.
         rect = self.visualRect(index)
         margin = 2
+
+        # If the drop position is above the index, return False.
         if pos.y() - rect.top() < margin:
             return False
+
+        # If the drop position is below the index, return True.
         elif rect.bottom() - pos.y() < margin:
             return True
-        # noinspection PyTypeChecker
+
+        # Check if position is within the item's rectangle and not on a drop-enabled item.
         return rect.contains(pos, True) and not (
                 int(self.model().flags(index)) & Qt.ItemIsDropEnabled) and pos.y() >= rect.center().y()
+
+
+class DropList(QListWidget):
+    def __init__(self, parent=None):
+        super(DropList, self).__init__(parent)
+
+        # Enable accepting drops.
+        self.setAcceptDrops(True)
+
+    def dragEnterEvent(self, event):
+        """Handle drag enter event."""
+        # Check if the event contains URLs.
+        if event.mimeData().hasUrls():
+            # Accept the proposed action.
+            event.acceptProposedAction()
+        else:
+            # Ignore the event if it doesn't contain URLs.
+            event.ignore()
+
+    def dragMoveEvent(self, event):
+        """Handle drag move event."""
+        # Check if the event contains URLs.
+        if event.mimeData().hasUrls():
+            # Accept the proposed action.
+            event.acceptProposedAction()
+        else:
+            # Ignore the event if it doesn't contain URLs.
+            event.ignore()
+
+    def dropEvent(self, event):
+        """Handle drop event."""
+        # Get the mime data from the event.
+        md = event.mimeData()
+        # Check if the mime data contains URLs.
+        if md.hasUrls():
+            # Iterate through the URLs.
+            for url in md.urls():
+                # Get the local file path from the URL.
+                filepath = url.toLocalFile()
+                # Check if the file path corresponds to a FLAC file.
+                if self.parent().isFLAC(filepath):
+                    # Add the file path to the list.
+                    self.addItem(filepath)
+                else:
+                    print(f"{filepath} is not a FLAC file. Skipping.")
+            # Accept the proposed action.
+            event.acceptProposedAction()
 
 
 class FLACTagEditor(QWidget):
@@ -80,136 +156,151 @@ class FLACTagEditor(QWidget):
         super().__init__()
         self.initUI()
 
-    def center(self):
-        qr = self.frameGeometry()
-        cp = QDesktopWidget().availableGeometry().center()
-        qr.moveCenter(cp)
-        self.move(qr.topLeft())
-
     def initUI(self):
+
+        # Set the window title.
         self.setWindowTitle('FLAC Tag Editor')
-        self.setGeometry(100, 100, 800, 600)  # 表示窗口左上角的 x 坐标、y 坐标，以及窗口的宽度和高度
+
+        # Set the window's geometry (x, y, width, height).
+        self.setGeometry(100, 100, 800, 600)
+
+        # Center the window.
         self.center()
 
+        # Create a button for importing FLAC files.
         self.import_button = QPushButton('Import FLAC File', self)
         self.import_button.clicked.connect(self.importFLAC)
 
+        # Create a button for showing FLAC file info.
         self.info_button = QPushButton('Show FLAC Info', self)
         self.info_button.clicked.connect(self.showFLACInfo)
 
-        self.delete_selected_button = QPushButton('Delete', self)
-        self.delete_selected_button.clicked.connect(self.deleteSelectedFiles)
-        self.delete_selected_button.setEnabled(False)  # 初始状态禁用
+        # Create a button for deleting selected files.
+        self.delete_button = QPushButton('Delete', self)
+        self.delete_button.clicked.connect(self.deleteSelectedFiles)
+        self.delete_button.setEnabled(False)  # Initially disable the delete button.
 
+        # Create a button for clearing the list.
         self.clear_button = QPushButton('Clear', self)
         self.clear_button.clicked.connect(self.clearList)
 
+        # Create a horizontal layout for buttons.
+        top_buttons_layout = QHBoxLayout()
+        top_buttons_layout.addWidget(self.import_button)
+        top_buttons_layout.addWidget(self.info_button)
+        top_buttons_layout.addWidget(self.delete_button)
+        top_buttons_layout.addWidget(self.clear_button)
 
-        button_layout = QHBoxLayout()
-        button_layout.addWidget(self.import_button)
-        button_layout.addWidget(self.info_button)
-        button_layout.addWidget(self.delete_selected_button)
-        button_layout.addWidget(self.clear_button)
-
+        # Create a drop list widget.
         self.list_widget = DropList(self)
+        # Enable accepting drops.
         self.list_widget.setAcceptDrops(True)
+        # Set the fixed height of the list widget.
         self.list_widget.setFixedHeight(150)
 
-        # # Create QLabel for displaying image
-        # self.cover_label = QLabel(self)
-        # self.cover_label.setFixedSize(150, 150)  # Set fixed size for the image label
-        # # Create QHBoxLayout to contain list widget and cover image
-        # list_cover_layout = QHBoxLayout()
-        #
-        # # Add list widget to the layout
-        # list_cover_layout.addWidget(self.list_widget)
-        #
-        # # Create a QWidget container for the cover image
-        # cover_widget = QWidget()
-        #
-        # # Set maximum size for cover widget
-        # cover_widget.setMaximumSize(200, 200)
-        #
-        # # Add cover label to the cover widget
-        # cover_layout = QVBoxLayout(cover_widget)
-        # cover_layout.addWidget(self.cover_label)
-        # cover_layout.setAlignment(Qt.AlignCenter)
-        #
-        # # Add cover widget to the layout
-        # list_cover_layout.addWidget(cover_widget)
-
-
+        # Create a table widget for drag and drop rows.
         self.table = TableWidgetDragRows(self)
+        # Set the number of columns in the table.
         self.table.setColumnCount(2)
+        # Hide the vertical header.
         self.table.verticalHeader().setVisible(False)
+        # Set the horizontal header labels.
         self.table.setHorizontalHeaderLabels(['Field Name', 'Value'])
+        # Set the width of the first column.
         self.table.setColumnWidth(0, 300)
-        self.table.setColumnWidth(1, 450)
+        # Set the width of the second column.
+        self.table.setColumnWidth(1, 400)
 
-        # 创建添加、删除和保存按钮
+        # Create a button for adding rows.
         self.add_button = QPushButton('Add', self)
         self.add_button.clicked.connect(self.addTableRow)
 
+        # Create a button for deleting rows.
         self.delete_button = QPushButton('Delete', self)
         self.delete_button.clicked.connect(self.deleteTableRow)
 
+        # Create a button for saving changes.
         self.save_button = QPushButton('Save', self)
         self.save_button.clicked.connect(self.saveFLAC)
 
-        # 创建复选框和单行文本框
+        # Create a checkbox for padding.
         self.use_padding_checkbox = QCheckBox('Use New Padding', self)
+        # Create a line edit for entering padding value.
         self.padding_lineedit = QLineEdit(self)
+        # Set placeholder text for the line edit.
         self.padding_lineedit.setPlaceholderText("Enter padding value")
-        self.padding_lineedit.setEnabled(False)  # 初始状态禁用
+        # Initially disable the line edit.
+        self.padding_lineedit.setEnabled(False)
 
-        # 为复选框的状态切换设置事件处理函数
         self.use_padding_checkbox.stateChanged.connect(self.updatePaddingLineEditState)
 
-        # 创建布局并添加控件
-        layout = QVBoxLayout()
-        layout.addLayout(button_layout)
-        layout.addWidget(self.list_widget)
-        # layout.addLayout(list_cover_layout)
-        layout.addWidget(self.table)
-
-        # 创建水平布局来放置添加和删除按钮
+        # Create a horizontal layout for add and delete buttons.
         buttons_layout_left = QHBoxLayout()
         buttons_layout_left.addWidget(self.add_button)
         buttons_layout_left.addWidget(self.delete_button)
 
-        # 创建水平布局来放置复选框和文本框以及保存按钮
+        # Create a horizontal layout for checkbox, line edit, and save button.
         buttons_layout_right = QHBoxLayout()
         buttons_layout_right.addWidget(self.use_padding_checkbox)
         buttons_layout_right.addWidget(self.padding_lineedit)
         buttons_layout_right.addWidget(self.save_button)
 
-        # 创建水平布局用于将左侧按钮和右侧控件放在一起
-        buttons_layout = QHBoxLayout()
-        buttons_layout.addLayout(buttons_layout_left)
-        buttons_layout.addStretch(1)  # 添加弹簧，使右侧控件靠右对齐
-        buttons_layout.addLayout(buttons_layout_right)
+        # Create a horizontal layout to combine left and right button layouts.
+        bottom_buttons_layout = QHBoxLayout()
+        bottom_buttons_layout.addLayout(buttons_layout_left)
+        bottom_buttons_layout.addStretch(1)  # Add stretch to align right-side widgets to the right.
+        bottom_buttons_layout.addLayout(buttons_layout_right)
 
-        # 将按钮布局添加到主垂直布局中
-        layout.addLayout(buttons_layout)
+        # Create the main layout.
+        layout = QVBoxLayout()
+        layout.addLayout(top_buttons_layout)
+        layout.addWidget(self.list_widget)
+        layout.addWidget(self.table)
+        layout.addLayout(bottom_buttons_layout)
 
+        # Set the main layout
         self.setLayout(layout)
 
+        self.list_widget.itemSelectionChanged.connect(self.showTags)
 
-        self.list_widget.itemSelectionChanged.connect(self.showSelectedFLACInfo)
+    def center(self):
+        """Center the window on the screen."""
+        qr = self.frameGeometry()
+        cp = QDesktopWidget().availableGeometry().center()
+        qr.moveCenter(cp)
+        self.move(qr.topLeft())
+
+    def importFLAC(self):
+        """Import FLAC files."""
+        filepaths, _ = QFileDialog.getOpenFileNames(self, 'Import FLAC Files', '', 'FLAC Files (*.flac)')
+        if filepaths:
+            for filepath in filepaths:
+                if self.isFLAC(filepath):
+                    self.list_widget.addItem(filepath)
+                else:
+                    print(f"{filepath} is not a FLAC file. Skipping.")
 
     def showFLACInfo(self):
+        """Show information about the selected FLAC file."""
+
         selected_items = self.list_widget.selectedItems()
         if selected_items:
             filepath = selected_items[0].text()
 
-            # Call the code to get FLAC information
-            file_hash, md5, sample_rate, bits_per_sample, bitrate, length, padding_length, vendor_string = self.getFLACInfo(
+            # Get FLAC file information
+            file_hash, md5, bits_per_sample, sample_rate, bitrate, length, padding_length, vendor_string = self.getFLACInfo(
                 filepath)
 
             # Construct the message to display
-            msg_text = f'File Name:{os.path.basename(filepath)}\n'
-            msg_text += f'File Hash: {file_hash}\nAudio MD5: {md5}\nSample Rate: {sample_rate} kHz\nBits Per Sample: {bits_per_sample}\nLength: {length}\nBit Rate: {bitrate}\n'
-            msg_text += f'Padding Length: {padding_length}\nVendor String: {vendor_string}\n'
+            msg_text = f'File Name: {os.path.basename(filepath)}\n' \
+                       f'File Hash: {file_hash}\n' \
+                       f'Audio MD5: {md5}\n' \
+                       f'Bits Per Sample: {bits_per_sample} bit\n' \
+                       f'Sample Rate: {sample_rate} kHz\n' \
+                       f'Bit Rate: {bitrate} kbps\n' \
+                       f'Length: {length}\n' \
+                       f'Padding Length: {padding_length}\n' \
+                       f'Vendor String: {vendor_string}\n'
 
             # Display the message in a QMessageBox
             msg = QMessageBox()
@@ -220,14 +311,23 @@ class FLACTagEditor(QWidget):
             QMessageBox.warning(self, "Warning", "Please select a FLAC file first.")
 
     def getFLACInfo(self, filepath):
+        """Get information about the FLAC file.
+
+        Args:
+            filepath (str): The path to the FLAC file.
+
+        Returns:
+            tuple: A tuple containing file hash, MD5 signature, bits per sample, sample rate,
+                bitrate, length, padding length, and vendor string.
+        """
+
         # Initialize variables to store FLAC information
         file_hash = ''
         md5 = ''
-        sample_rate = ''
         bits_per_sample = ''
+        sample_rate = ''
         bitrate = ''
         length = ''
-
         padding_length = ''
         vendor_string = ''
 
@@ -252,25 +352,16 @@ class FLACTagEditor(QWidget):
                     padding_length = block.length
 
             # Get vendor string
-            try:
-                vendor_string = flac.tags.vendor
-            except:
-                vendor_string = '获取失败'
+            vendor_string = flac.tags.vendor
 
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to read FLAC information: {str(e)}")
 
         # Return FLAC information
-        return file_hash, md5, sample_rate, bits_per_sample, bitrate, length, padding_length, vendor_string
-
-    def updatePaddingLineEditState(self, state):
-        # 根据复选框状态设置单行文本框的启用状态
-        if state == Qt.Checked:
-            self.padding_lineedit.setEnabled(True)
-        else:
-            self.padding_lineedit.setEnabled(False)
+        return file_hash, md5, bits_per_sample, sample_rate, bitrate, length, padding_length, vendor_string
 
     def deleteSelectedFiles(self):
+        """Delete selected files from the list."""
         selected_items = self.list_widget.selectedItems()
         if selected_items:
             for item in selected_items:
@@ -278,90 +369,132 @@ class FLACTagEditor(QWidget):
         self.updateDeleteSelectedButtonState()
 
     def updateDeleteSelectedButtonState(self):
+        """Update the state of the delete button based on whether items are selected."""
         selected_items = self.list_widget.selectedItems()
-        self.delete_selected_button.setEnabled(bool(selected_items))
+        self.delete_button.setEnabled(bool(selected_items))
 
     def clearList(self):
-        self.list_widget.clear()  # 清空列表
+        """Clear all items from the list."""
+        # Clear the list
+        self.list_widget.clear()
+        # Update the state of the delete button
         self.updateDeleteSelectedButtonState()  # 更新删除按钮状态
 
-
-    def showSelectedFLACInfo(self):
+    def showTags(self):
+        """Show tags of the selected FLAC file."""
         selected_items = self.list_widget.selectedItems()
         if selected_items:
             filepath = selected_items[0].text()
-            # self.metadata = FLAC(filepath).tags
-            # self.populateTable()
             try:
                 self.metadata = FLAC(filepath).tags
                 self.populateTable()
-
-                # # Display cover image
-                # self.showCoverImage(filepath)
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to read tags from {filepath}: {str(e)}")
                 self.table.setRowCount(0)
-                # Clear cover label on error
-                # self.cover_label.clear()
         else:
             self.table.setRowCount(0)
 
-        self.updateDeleteSelectedButtonState()  # 更新删除按钮的状态
-    #
-    # def showCoverImage(self, flac_path):
-    #     try:
-    #         audio = FLAC(flac_path)
-    #         pictures = audio.pictures
-    #         for p in pictures:
-    #             if p.type == 3:
-    #                 # Convert image data to QPixmap and display in cover label
-    #                 pixmap = QPixmap()
-    #                 pixmap.loadFromData(p.data)
-    #                 self.cover_label.setPixmap(pixmap.scaled(150, 150, Qt.KeepAspectRatio))
-    #                 return  # Exit after displaying the first cover
-    #         # If no cover found, clear cover label
-    #         self.cover_label.clear()
-    #     except Exception as e:
-    #         print(f"Error displaying cover image: {e}")
-
+        self.updateDeleteSelectedButtonState()
 
     def populateTable(self):
+        """Populate the table with FLAC metadata."""
+
+        # Set the number of rows in the table
         self.table.setRowCount(len(self.metadata))
 
+        # Initialize the row index
         row = 0
+
+        # Iterate through metadata items
         for key, value in self.metadata:
+            # Create a QTableWidgetItem for the field key
             field_item = QTableWidgetItem(key)
-            value_item = QTableWidgetItem(str(value))  # Convert to string if it's a list
+            # Create a QTableWidgetItem for the field value
+            value_item = QTableWidgetItem(value)
+            # Set the field item in the first column
             self.table.setItem(row, 0, field_item)
+            # Set the value item in the second column
             self.table.setItem(row, 1, value_item)
+            # Increment the row index
             row += 1
 
+        # Resize table columns interactively
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
 
-    def importFLAC(self):
-        filepaths, _ = QFileDialog.getOpenFileNames(self, 'Import FLAC Files', '', 'FLAC Files (*.flac)')
-        if filepaths:
-            for filepath in filepaths:
-                if self.isFLAC(filepath):
-                    self.list_widget.addItem(filepath)
-                else:
-                    print(f"{filepath} is not a FLAC file. Skipping.")
-            # for filepath in filepaths:
-            #     self.list_widget.addItem(filepath)
+    def addTableRow(self):
+        """Add a new row to the table."""
+
+        # Get the current row count
+        row_count = self.table.rowCount()
+
+        # Insert a new row
+        self.table.insertRow(row_count)
+
+        # Set an empty item in the "Field Name" column
+        self.table.setItem(row_count, 0, QTableWidgetItem(""))
+
+        # Set an empty item in the "Value" column
+        self.table.setItem(row_count, 1, QTableWidgetItem(""))
+
+        # Set focus to the "Field Name" column of the new row
+        self.table.setCurrentCell(row_count, 0)
+
+        # Get the item in the "Field Name" column
+        item = self.table.item(row_count, 0)
+        if item:
+            # Enter edit mode for the item
+            self.table.editItem(item)
+
+            # Scroll to make the item visible
+            self.table.scrollToItem(item, QtWidgets.QAbstractItemView.PositionAtTop)  # 滚动到可见区域
+
+    def deleteTableRow(self):
+        """Delete selected rows from the table."""
+
+        # Get selected rows
+        selected_rows = self.table.selectionModel().selectedRows()
+        # Iterate over selected rows in reverse order
+        for row in reversed(selected_rows):
+            # Remove the row from the table
+            self.table.removeRow(row.row())
+
+    def updatePaddingLineEditState(self, state):
+        """Update the state of the padding line edit based on the checkbox state.
+
+        Args:
+            state: The state of the checkbox.
+        """
+
+        # Enable/disable the padding line edit based on the checkbox state
+        if state == Qt.Checked:
+            self.padding_lineedit.setEnabled(True)
+        else:
+            self.padding_lineedit.setEnabled(False)
 
     def saveFLAC(self):
+        """Save metadata to a FLAC file."""
+
         metadata_dict = {}
+
+        # Iterate over rows in the table
         for row in range(self.table.rowCount()):
+            # Get the item in the "Field Name" column
             field_name_item = self.table.item(row, 0)
+            # Get the item in the "Value" column
             value_item = self.table.item(row, 1)
+            # If both items exist
             if field_name_item and value_item:
+                # Get the text of the "Field Name" item
                 field_name = field_name_item.text()
+                # Get the text of the "Value" item
                 value = value_item.text()
+                # Add the field name and value to the metadata dictionary
                 metadata_dict[field_name] = value
 
+        # Check if padding is enabled
         use_padding = self.use_padding_checkbox.isChecked()
 
-        # 如果复选框被勾选但是单行文本框为空或者不是数字，报错
+        # Check if padding is enabled and the padding value is valid
         if use_padding:
             padding_value = self.padding_lineedit.text()
             if not padding_value or not padding_value.isdigit():
@@ -369,150 +502,61 @@ class FLACTagEditor(QWidget):
                                      "Padding value must be a non-empty number when 'Use New Padding' is checked.")
                 return
 
+        # Get selected items from the list widget
         selected_items = self.list_widget.selectedItems()
         if selected_items:
+            # Get the filepath of the selected item
             filepath = selected_items[0].text()
             try:
+                # Open the FLAC file
                 flac = File(filepath)
+
+                # Clear existing tags
                 if flac.tags:
                     flac.tags.clear()
 
+                # Set metadata tags
                 for k, v in metadata_dict.items():
                     flac[k] = v
 
                 if use_padding:
+                    # Save FLAC file with new padding
                     flac.save(padding=self.new_padding)
                 else:
+                    # Save FLAC file without new padding
                     flac.save()
+                # Display success message
+                QMessageBox.information(self, "Success", "Tags saved successfully.")
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to save tags to {filepath}: {str(e)}")
-                self.table.setRowCount(0)
+                self.table.setRowCount(0)  # Clear the table
                 return
         else:
             QMessageBox.warning(self, "Warning", "Please select a FLAC file first.")
             return
 
-
-        msg = QMessageBox()
-        msg.setWindowTitle("Success")
-        padding_value = self.padding_lineedit.text() if use_padding else "Not used"
-        msg_text = f"Saved successfully.\n\nUse New Padding: {use_padding}\nPadding Value: {padding_value}\n\n{metadata_dict}"
-        msg.setText(msg_text)
-        msg.exec_()
-
     def new_padding(self, padding):
+        """Get the new padding value from the padding line edit."""
+        # Return the integer value of the text in the padding line edit
         return int(self.padding_lineedit.text())
 
-
     def isFLAC(self, filepath):
+        """Check if the file at the given filepath is a FLAC file."""
+        # Split the filepath to get the extension
         _, ext = os.path.splitext(filepath)
+        # Check if the extension is ".flac" (case-insensitive)
         return ext.lower() == ".flac"
-
-    # def addTableRow(self):
-    #     dialog = AddRowDialog(self)
-    #     if dialog.exec_():
-    #         field_name = dialog.field_name.text()
-    #         value = dialog.value.text()
-    #
-    #         row_count = self.table.rowCount()
-    #         self.table.insertRow(row_count)
-    #         self.table.setItem(row_count, 0, QTableWidgetItem(field_name))
-    #         self.table.setItem(row_count, 1, QTableWidgetItem(value))
-
-    def addTableRow(self):
-        row_count = self.table.rowCount()
-        self.table.insertRow(row_count)
-        self.table.setItem(row_count, 0, QTableWidgetItem(""))
-        self.table.setItem(row_count, 1, QTableWidgetItem(""))
-        self.table.setCurrentCell(row_count, 0)  # 设置焦点到新行的"Field Name"列
-
-        item = self.table.item(row_count, 0)
-        if item:
-            self.table.editItem(item)  # 进入编辑状态
-            self.table.scrollToItem(item, QtWidgets.QAbstractItemView.PositionAtTop)  # 滚动到可见区域
-
-    def deleteTableRow(self):
-        selected_rows = self.table.selectionModel().selectedRows()
-        for row in reversed(selected_rows):
-            self.table.removeRow(row.row())
-
-
-class AddRowDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-
-        self.setWindowTitle("Add Row")
-        self.initUI()
-
-    def initUI(self):
-        self.field_name_label = QLabel("Field Name:")
-        self.field_name = QLineEdit()
-        self.value_label = QLabel("Value:")
-        self.value = QLineEdit()
-
-        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        button_box.accepted.connect(self.accept)
-        button_box.rejected.connect(self.reject)
-
-        layout = QVBoxLayout()
-        layout.addWidget(self.field_name_label)
-        layout.addWidget(self.field_name)
-        layout.addWidget(self.value_label)
-        layout.addWidget(self.value)
-        layout.addWidget(button_box)
-
-        self.setLayout(layout)
-
-
-class DropList(QListWidget):
-    def __init__(self, parent=None):
-        super(DropList, self).__init__(parent)
-        self.setAcceptDrops(True)
-
-        self.initContextMenu()  # 右键菜单
-
-    def initContextMenu(self):
-        self.setContextMenuPolicy(Qt.CustomContextMenu)
-        self.customContextMenuRequested.connect(self.showContextMenu)
-
-        self.delete_action = QAction("Delete", self)
-        self.delete_action.triggered.connect(self.deleteSelectedItem)
-
-    def showContextMenu(self, pos):
-        menu = QMenu(self)
-        menu.addAction(self.delete_action)
-        menu.exec_(self.mapToGlobal(pos))
-
-    def deleteSelectedItem(self):
-        for item in self.selectedItems():
-            self.takeItem(self.row(item))
-
-    def dragEnterEvent(self, event):
-        if event.mimeData().hasUrls():
-            event.acceptProposedAction()
-        else:
-            event.ignore()
-
-    def dragMoveEvent(self, event):
-        if event.mimeData().hasUrls():
-            event.acceptProposedAction()
-        else:
-            event.ignore()
-
-    def dropEvent(self, event):
-        md = event.mimeData()
-        if md.hasUrls():
-            for url in md.urls():
-                # self.addItem(url.toLocalFile())
-                filepath = url.toLocalFile()
-                if self.parent().isFLAC(filepath):
-                    self.addItem(filepath)
-                else:
-                    print(f"{filepath} is not a FLAC file. Skipping.")
-            event.acceptProposedAction()
 
 
 def get_hash(filename):
+    """Calculate the MD5 hash of a file.
+
+    Args:
+        filename (str): The path to the file.
+
+    Returns:
+        str: The MD5 hash of the file.
+    """
     with open(filename, 'rb') as f:
         file_hash = hashlib.md5()
         while chunk := f.read(8192):
@@ -521,17 +565,32 @@ def get_hash(filename):
 
 
 def format_seconds(seconds):
+    """Format seconds into a human-readable time string.
+
+    Args:
+        seconds (int): The number of seconds.
+
+    Returns:
+        str: A formatted time string (HH:MM:SS).
+    """
     td = datetime.timedelta(seconds=seconds)
     hours, remainder = divmod(td.seconds, 3600)
     minutes, seconds = divmod(remainder, 60)
     time_str = f'{hours:02}:{minutes:02}:{seconds:02}'
     return time_str
 
+
 def bits_per_second_to_kbps(bits_per_second):
-    kbps = round(bits_per_second / 1000)  # 将比特率除以 1000，以获得千比特每秒（kbps）
-    return f'{kbps} kbps'
+    """Convert bits per second to kilobits per second (kbps).
 
+    Args:
+        bits_per_second (int): Bits per second.
 
+    Returns:
+        str: The converted value in kilobits per second.
+    """
+    kbps = round(bits_per_second / 1000)
+    return kbps
 
 
 if __name__ == '__main__':
