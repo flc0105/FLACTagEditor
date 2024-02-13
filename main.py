@@ -5,10 +5,11 @@ import sys
 
 from PyQt5 import QtWidgets
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QDropEvent
+from PyQt5.QtGui import QDropEvent, QPixmap
 from PyQt5.QtWidgets import QAbstractItemView, QApplication, QWidget, QVBoxLayout, QTableWidget, QTableWidgetItem, \
     QHeaderView, QListWidget, QPushButton, QFileDialog, QMessageBox, QDesktopWidget, QAction, QMenu, QHBoxLayout, \
-    QDialog, QLabel, QLineEdit, QDialogButtonBox, QCheckBox
+    QDialog, QLabel, QLineEdit, QDialogButtonBox, QCheckBox, QSpacerItem, QSizePolicy
+from mutagen import File
 from mutagen.flac import FLAC
 
 
@@ -96,7 +97,7 @@ class FLACTagEditor(QWidget):
         self.info_button = QPushButton('Show FLAC Info', self)
         self.info_button.clicked.connect(self.showFLACInfo)
 
-        self.delete_selected_button = QPushButton('Delete Selected', self)
+        self.delete_selected_button = QPushButton('Delete', self)
         self.delete_selected_button.clicked.connect(self.deleteSelectedFiles)
         self.delete_selected_button.setEnabled(False)  # 初始状态禁用
 
@@ -113,6 +114,30 @@ class FLACTagEditor(QWidget):
         self.list_widget = DropList(self)
         self.list_widget.setAcceptDrops(True)
         self.list_widget.setFixedHeight(150)
+
+        # # Create QLabel for displaying image
+        # self.cover_label = QLabel(self)
+        # self.cover_label.setFixedSize(150, 150)  # Set fixed size for the image label
+        # # Create QHBoxLayout to contain list widget and cover image
+        # list_cover_layout = QHBoxLayout()
+        #
+        # # Add list widget to the layout
+        # list_cover_layout.addWidget(self.list_widget)
+        #
+        # # Create a QWidget container for the cover image
+        # cover_widget = QWidget()
+        #
+        # # Set maximum size for cover widget
+        # cover_widget.setMaximumSize(200, 200)
+        #
+        # # Add cover label to the cover widget
+        # cover_layout = QVBoxLayout(cover_widget)
+        # cover_layout.addWidget(self.cover_label)
+        # cover_layout.setAlignment(Qt.AlignCenter)
+        #
+        # # Add cover widget to the layout
+        # list_cover_layout.addWidget(cover_widget)
+
 
         self.table = TableWidgetDragRows(self)
         self.table.setColumnCount(2)
@@ -144,6 +169,7 @@ class FLACTagEditor(QWidget):
         layout = QVBoxLayout()
         layout.addLayout(button_layout)
         layout.addWidget(self.list_widget)
+        # layout.addLayout(list_cover_layout)
         layout.addWidget(self.table)
 
         # 创建水平布局来放置添加和删除按钮
@@ -177,11 +203,12 @@ class FLACTagEditor(QWidget):
             filepath = selected_items[0].text()
 
             # Call the code to get FLAC information
-            file_hash, md5, sample_rate, bits_per_sample, length, padding_length, vendor_string = self.getFLACInfo(
+            file_hash, md5, sample_rate, bits_per_sample, bitrate, length, padding_length, vendor_string = self.getFLACInfo(
                 filepath)
 
             # Construct the message to display
-            msg_text = f'File Hash: {file_hash}\nAudio MD5: {md5}\nSample Rate: {sample_rate} kHz\nBits Per Sample: {bits_per_sample}\nLength: {length}\n'
+            msg_text = f'File Name:{os.path.basename(filepath)}\n'
+            msg_text += f'File Hash: {file_hash}\nAudio MD5: {md5}\nSample Rate: {sample_rate} kHz\nBits Per Sample: {bits_per_sample}\nLength: {length}\nBit Rate: {bitrate}\n'
             msg_text += f'Padding Length: {padding_length}\nVendor String: {vendor_string}\n'
 
             # Display the message in a QMessageBox
@@ -198,6 +225,7 @@ class FLACTagEditor(QWidget):
         md5 = ''
         sample_rate = ''
         bits_per_sample = ''
+        bitrate = ''
         length = ''
 
         padding_length = ''
@@ -215,6 +243,7 @@ class FLACTagEditor(QWidget):
             md5 = hex(info.md5_signature).split('x')[-1]
             sample_rate = info.sample_rate / 1000
             bits_per_sample = info.bits_per_sample
+            bitrate = bits_per_second_to_kbps(info.bitrate)
             length = format_seconds(info.length)
 
             # Get padding length
@@ -232,7 +261,7 @@ class FLACTagEditor(QWidget):
             QMessageBox.critical(self, "Error", f"Failed to read FLAC information: {str(e)}")
 
         # Return FLAC information
-        return file_hash, md5, sample_rate, bits_per_sample, length, padding_length, vendor_string
+        return file_hash, md5, sample_rate, bits_per_sample, bitrate, length, padding_length, vendor_string
 
     def updatePaddingLineEditState(self, state):
         # 根据复选框状态设置单行文本框的启用状态
@@ -266,13 +295,35 @@ class FLACTagEditor(QWidget):
             try:
                 self.metadata = FLAC(filepath).tags
                 self.populateTable()
+
+                # # Display cover image
+                # self.showCoverImage(filepath)
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to read tags from {filepath}: {str(e)}")
                 self.table.setRowCount(0)
+                # Clear cover label on error
+                # self.cover_label.clear()
         else:
             self.table.setRowCount(0)
 
         self.updateDeleteSelectedButtonState()  # 更新删除按钮的状态
+    #
+    # def showCoverImage(self, flac_path):
+    #     try:
+    #         audio = FLAC(flac_path)
+    #         pictures = audio.pictures
+    #         for p in pictures:
+    #             if p.type == 3:
+    #                 # Convert image data to QPixmap and display in cover label
+    #                 pixmap = QPixmap()
+    #                 pixmap.loadFromData(p.data)
+    #                 self.cover_label.setPixmap(pixmap.scaled(150, 150, Qt.KeepAspectRatio))
+    #                 return  # Exit after displaying the first cover
+    #         # If no cover found, clear cover label
+    #         self.cover_label.clear()
+    #     except Exception as e:
+    #         print(f"Error displaying cover image: {e}")
+
 
     def populateTable(self):
         self.table.setRowCount(len(self.metadata))
@@ -299,8 +350,6 @@ class FLACTagEditor(QWidget):
             #     self.list_widget.addItem(filepath)
 
     def saveFLAC(self):
-        # Here you should implement a function to save the edited metadata
-        print("save")
         metadata_dict = {}
         for row in range(self.table.rowCount()):
             field_name_item = self.table.item(row, 0)
@@ -310,11 +359,6 @@ class FLACTagEditor(QWidget):
                 value = value_item.text()
                 metadata_dict[field_name] = value
 
-        # 使用QMessageBox显示字典内容
-        msg = QMessageBox()
-        msg.setWindowTitle("Metadata Dictionary")
-
-        # 检查复选框状态，根据需要显示单行文本框的内容
         use_padding = self.use_padding_checkbox.isChecked()
 
         # 如果复选框被勾选但是单行文本框为空或者不是数字，报错
@@ -325,16 +369,40 @@ class FLACTagEditor(QWidget):
                                      "Padding value must be a non-empty number when 'Use New Padding' is checked.")
                 return
 
-        padding_value = self.padding_lineedit.text() if use_padding else "Not used"
+        selected_items = self.list_widget.selectedItems()
+        if selected_items:
+            filepath = selected_items[0].text()
+            try:
+                flac = File(filepath)
+                if flac.tags:
+                    flac.tags.clear()
 
-        # 提示框中显示是否勾选了新padding选项以及相应的数值
+                for k, v in metadata_dict.items():
+                    flac[k] = v
+
+                if use_padding:
+                    flac.save(padding=self.new_padding)
+                else:
+                    flac.save()
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to save tags to {filepath}: {str(e)}")
+                self.table.setRowCount(0)
+                return
+        else:
+            QMessageBox.warning(self, "Warning", "Please select a FLAC file first.")
+            return
+
+
         msg = QMessageBox()
-        msg.setWindowTitle("Metadata Dictionary")
-        msg_text = f"Use New Padding: {use_padding}\nPadding Value: {padding_value}\n\n{metadata_dict}"
+        msg.setWindowTitle("Success")
+        padding_value = self.padding_lineedit.text() if use_padding else "Not used"
+        msg_text = f"Saved successfully.\n\nUse New Padding: {use_padding}\nPadding Value: {padding_value}\n\n{metadata_dict}"
         msg.setText(msg_text)
         msg.exec_()
-        # msg.setText(str(metadata_dict))
-        # msg.exec_()
+
+    def new_padding(self, padding):
+        return int(self.padding_lineedit.text())
+
 
     def isFLAC(self, filepath):
         _, ext = os.path.splitext(filepath)
@@ -458,6 +526,12 @@ def format_seconds(seconds):
     minutes, seconds = divmod(remainder, 60)
     time_str = f'{hours:02}:{minutes:02}:{seconds:02}'
     return time_str
+
+def bits_per_second_to_kbps(bits_per_second):
+    kbps = round(bits_per_second / 1000)  # 将比特率除以 1000，以获得千比特每秒（kbps）
+    return f'{kbps} kbps'
+
+
 
 
 if __name__ == '__main__':
