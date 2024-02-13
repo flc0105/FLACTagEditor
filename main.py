@@ -147,6 +147,7 @@ class DropList(QListWidget):
                     self.addItem(filepath)
                 else:
                     print(f"{filepath} is not a FLAC file. Skipping.")
+            self.sortItems()
             # Accept the proposed action.
             event.acceptProposedAction()
 
@@ -216,7 +217,7 @@ class FLACTagEditor(QWidget):
         # Set the horizontal header labels.
         self.table.setHorizontalHeaderLabels(['Field Name', 'Value'])
         # Set the width of the first column.
-        self.table.setColumnWidth(0, 300)
+        self.table.setColumnWidth(0, 150)
         # Set the width of the second column.
         self.table.setColumnWidth(1, 400)
 
@@ -288,6 +289,7 @@ class FLACTagEditor(QWidget):
                     self.list_widget.addItem(filepath)
                 else:
                     print(f"{filepath} is not a FLAC file. Skipping.")
+        self.list_widget.sortItems()
 
     def showFLACInfo(self):
         """Show information about the selected FLAC file."""
