@@ -432,30 +432,23 @@ class FLACTagEditor(QWidget):
                     self.table.setItem(row, 0, field_item)
 
                     # 获取所有文件中相同标签的值
-                    # values = []
                     values = set()
                     for item in selected_items:
                         filepath = item.text()
                         flac = FLAC(filepath)
                         file_value = flac.tags.get(tag, [''])[0]
                         values.add(file_value)
-                        # values.append(file_value)
 
-                    # 检查所有值是否相同
-                    # if len(set(values)) == 1:
-                    #     value_item = QTableWidgetItem(values[0])
                     if len(values) == 1:
                         value_item = QTableWidgetItem(next(iter(values)))
                     else:
-                        text = "; ".join(values)
+                        sorted_values = sorted(values)  # 对值进行排序
+                        text = "; ".join(sorted_values)
 
                         value_item = QTableWidgetItem(f"<Multivalued> {text}")
                         self.table.setItem(row, 1, value_item)
 
                         value_item.setForeground(QBrush(QColor(128, 128, 128)))  # 设置文本颜色为灰色
-                        font = value_item.font()
-                        font.setItalic(True)
-                        value_item.setFont(font)
 
                     self.table.setItem(row, 1, value_item)
 
