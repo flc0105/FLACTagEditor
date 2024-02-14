@@ -2,7 +2,6 @@ import datetime
 import hashlib
 import os
 import sys
-from collections import Counter
 
 from PyQt5 import QtWidgets
 from PyQt5.QtCore import Qt
@@ -383,25 +382,18 @@ class FLACTagEditor(QWidget):
                 self.list_widget.takeItem(self.list_widget.row(item))
         else:
             QMessageBox.warning(self, "Warning", "Please select a FLAC file first.")
-        # self.updateDeleteSelectedButtonState()
-
-    # def updateDeleteSelectedButtonState(self):
-    #     """Update the state of the delete button based on whether items are selected."""
-    #     selected_items = self.list_widget.selectedItems()
-    #     self.delete_button.setEnabled(bool(selected_items))
 
     def clearList(self):
         """Clear all items from the list."""
         # Clear the list
         self.list_widget.clear()
-        # Update the state of the delete button
-        # self.updateDeleteSelectedButtonState()  # 更新删除按钮状态
 
     def showTags(self):
         """Show tags of the selected FLAC file."""
         selected_items = self.list_widget.selectedItems()
         if selected_items:
 
+            # 如果选中单个文件
             if len(selected_items) == 1:
                 filepath = selected_items[0].text()
                 try:
@@ -410,7 +402,9 @@ class FLACTagEditor(QWidget):
                 except Exception as e:
                     QMessageBox.critical(self, "Error", f"Failed to read tags from {filepath}: {str(e)}")
                     self.table.setRowCount(0)
+            # 如果选中多个文件
             else:
+
                 # 用于存储各个文件的标签字段及其顺序的列表
                 tag_fields = []
 
@@ -438,27 +432,36 @@ class FLACTagEditor(QWidget):
                     self.table.setItem(row, 0, field_item)
 
                     # 获取所有文件中相同标签的值
-                    values = []
+                    # values = []
+                    values = set()
                     for item in selected_items:
                         filepath = item.text()
                         flac = FLAC(filepath)
                         file_value = flac.tags.get(tag, [''])[0]
-                        values.append(file_value)
+                        values.add(file_value)
+                        # values.append(file_value)
 
                     # 检查所有值是否相同
-                    if len(set(values)) == 1:
-                        value_item = QTableWidgetItem(values[0])
+                    # if len(set(values)) == 1:
+                    #     value_item = QTableWidgetItem(values[0])
+                    if len(values) == 1:
+                        value_item = QTableWidgetItem(next(iter(values)))
                     else:
-                        value_item = QTableWidgetItem("<Will Not Change>")
+                        text = "; ".join(values)
+
+                        value_item = QTableWidgetItem(f"<Multivalued> {text}")
+                        self.table.setItem(row, 1, value_item)
+
                         value_item.setForeground(QBrush(QColor(128, 128, 128)))  # 设置文本颜色为灰色
+                        font = value_item.font()
+                        font.setItalic(True)
+                        value_item.setFont(font)
 
                     self.table.setItem(row, 1, value_item)
 
 
         else:
             self.table.setRowCount(0)
-
-        # self.updateDeleteSelectedButtonState()
 
     def populateTable(self):
         """Populate the table with FLAC metadata."""
@@ -659,8 +662,7 @@ class FLACTagEditor(QWidget):
 
                     # Set metadata tags
                     for k, v in metadata_dict.items():
-                        # Only update tags with values that are not "<Will Not Change>"
-                        if v == "<Will Not Change>":
+                        if v.startswith("<Multivalued> "):
                             # Restore original value
                             if filepath in original_tag_values and k in original_tag_values[filepath]:
                                 flac[k] = original_tag_values[filepath][k]
