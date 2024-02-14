@@ -220,7 +220,7 @@ class FLACTagEditor(QWidget):
         # Set the horizontal header labels.
         self.table.setHorizontalHeaderLabels(['Field Name', 'Value'])
         # Set the width of the first column.
-        self.table.setColumnWidth(0, 150)
+        self.table.setColumnWidth(0, 300)
         # Set the width of the second column.
         self.table.setColumnWidth(1, 400)
 
