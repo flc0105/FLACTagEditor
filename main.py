@@ -4,11 +4,11 @@ import os
 import sys
 
 from PyQt5 import QtWidgets
-from PyQt5.QtCore import Qt, QSize, QEvent
-from PyQt5.QtGui import QDropEvent, QBrush, QColor, QPixmap, QImageReader, QImage
+from PyQt5.QtCore import Qt, QEvent
+from PyQt5.QtGui import QDropEvent, QBrush, QColor, QPixmap, QImage
 from PyQt5.QtWidgets import QAbstractItemView, QApplication, QWidget, QVBoxLayout, QTableWidget, QTableWidgetItem, \
     QHeaderView, QListWidget, QPushButton, QFileDialog, QMessageBox, QDesktopWidget, QHBoxLayout, \
-    QLineEdit, QCheckBox, QDialog, QLabel, QFormLayout, QMenu, QAction, QGridLayout
+    QLineEdit, QCheckBox, QDialog, QLabel, QMenu, QAction, QGridLayout
 from mutagen import File
 from mutagen.flac import FLAC, Picture
 
@@ -184,20 +184,12 @@ class FLACTagEditor(QWidget):
         self.import_button = QPushButton('Import FLAC File', self)
         self.import_button.clicked.connect(self.importFLAC)
 
-        # Create a button for showing FLAC file info.
-        # self.info_button = QPushButton('Show FLAC Info', self)
-        # self.info_button.clicked.connect(self.showFLACInfo)
-
-        # self.set_cover_button = QPushButton("Set Cover")
-        # self.set_cover_button.clicked.connect(self.show_cover_window)
-
         self.blocks_button = QPushButton("Show Blocks")
         self.blocks_button.clicked.connect(self.show_blocks_window)
 
         # Create a button for deleting selected files.
         self.delete_button = QPushButton('Delete', self)
         self.delete_button.clicked.connect(self.deleteSelectedFiles)
-        # self.delete_button.setEnabled(False)  # Initially disable the delete button.
 
         # Create a button for clearing the list.
         self.clear_button = QPushButton('Clear', self)
@@ -206,8 +198,6 @@ class FLACTagEditor(QWidget):
         # Create a horizontal layout for buttons.
         top_buttons_layout = QHBoxLayout()
         top_buttons_layout.addWidget(self.import_button)
-        # top_buttons_layout.addWidget(self.info_button)
-        # top_buttons_layout.addWidget(self.set_cover_button)
         top_buttons_layout.addWidget(self.blocks_button)
         top_buttons_layout.addWidget(self.delete_button)
         top_buttons_layout.addWidget(self.clear_button)
@@ -291,24 +281,14 @@ class FLACTagEditor(QWidget):
         qr.moveCenter(cp)
         self.move(qr.topLeft())
 
-    # def show_cover_window(self):
-    #     selected_items = self.list_widget.selectedItems()
-    #     if selected_items:
-    #         filepath = selected_items[0].text()
-    #         cover_window = CoverWindow(filepath)
-    #         cover_window.exec_()
-    #     else:
-    #         QMessageBox.warning(self, "Warning", "Please select a FLAC file first.")
-
     def show_blocks_window(self):
         selected_items = self.list_widget.selectedItems()
         if selected_items:
             filepath = selected_items[0].text()
-            cover_window = MetadataWindow(filepath)
+            cover_window = BlocksWindow(filepath)
             cover_window.exec_()
         else:
             QMessageBox.warning(self, "Warning", "Please select a FLAC file first.")
-
 
     def importFLAC(self):
         """Import FLAC files."""
@@ -320,86 +300,6 @@ class FLACTagEditor(QWidget):
                 else:
                     print(f"{filepath} is not a FLAC file. Skipping.")
         self.list_widget.sortItems()
-
-    # def showFLACInfo(self):
-    #     """Show information about the selected FLAC file."""
-    #
-    #     selected_items = self.list_widget.selectedItems()
-    #     if selected_items:
-    #         filepath = selected_items[0].text()
-    #
-    #         # Get FLAC file information
-    #         file_hash, md5, bits_per_sample, sample_rate, bitrate, length, padding_length, vendor_string = self.getFLACInfo(
-    #             filepath)
-    #
-    #         # Construct the message to display
-    #         msg_text = f'File Name: {os.path.basename(filepath)}\n' \
-    #                    f'File Hash: {file_hash}\n' \
-    #                    f'Audio MD5: {md5}\n' \
-    #                    f'Bits Per Sample: {bits_per_sample} bit\n' \
-    #                    f'Sample Rate: {sample_rate} kHz\n' \
-    #                    f'Bit Rate: {bitrate} kbps\n' \
-    #                    f'Length: {length}\n' \
-    #                    f'Padding Length: {padding_length}\n' \
-    #                    f'Vendor String: {vendor_string}\n'
-    #
-    #         # Display the message in a QMessageBox
-    #         msg = QMessageBox()
-    #         msg.setWindowTitle("FLAC Information")
-    #         msg.setText(msg_text)
-    #         msg.exec_()
-    #     else:
-    #         QMessageBox.warning(self, "Warning", "Please select a FLAC file first.")
-
-    # def getFLACInfo(self, filepath):
-    #     """Get information about the FLAC file.
-    #
-    #     Args:
-    #         filepath (str): The path to the FLAC file.
-    #
-    #     Returns:
-    #         tuple: A tuple containing file hash, MD5 signature, bits per sample, sample rate,
-    #             bitrate, length, padding length, and vendor string.
-    #     """
-    #
-    #     # Initialize variables to store FLAC information
-    #     file_hash = ''
-    #     md5 = ''
-    #     bits_per_sample = ''
-    #     sample_rate = ''
-    #     bitrate = ''
-    #     length = ''
-    #     padding_length = ''
-    #     vendor_string = ''
-    #
-    #     try:
-    #         # Calculate file hash
-    #         file_hash = get_hash(filepath)
-    #
-    #         # Read FLAC file
-    #         flac = FLAC(filepath)
-    #         info = flac.info
-    #
-    #         # Get FLAC file information
-    #         md5 = hex(info.md5_signature).split('x')[-1]
-    #         sample_rate = info.sample_rate / 1000
-    #         bits_per_sample = info.bits_per_sample
-    #         bitrate = bits_per_second_to_kbps(info.bitrate)
-    #         length = format_seconds(info.length)
-    #
-    #         # Get padding length
-    #         for block in flac.metadata_blocks:
-    #             if block.code == 1:
-    #                 padding_length = block.length
-    #
-    #         # Get vendor string
-    #         vendor_string = flac.tags.vendor
-    #
-    #     except Exception as e:
-    #         QMessageBox.critical(self, "Error", f"Failed to read FLAC information: {str(e)}")
-    #
-    #     # Return FLAC information
-    #     return file_hash, md5, bits_per_sample, sample_rate, bitrate, length, padding_length, vendor_string
 
     def deleteSelectedFiles(self):
         """Delete selected files from the list."""
@@ -431,7 +331,6 @@ class FLACTagEditor(QWidget):
                     self.table.setRowCount(0)
             # 如果选中多个文件
             else:
-
                 # 用于存储各个文件的标签字段及其顺序的列表
                 tag_fields = []
 
@@ -558,70 +457,6 @@ class FLACTagEditor(QWidget):
             self.padding_lineedit.setEnabled(True)
         else:
             self.padding_lineedit.setEnabled(False)
-
-    # def saveFLAC(self):
-    #     """Save metadata to a FLAC file."""
-    #
-    #     metadata_dict = {}
-    #
-    #     # Iterate over rows in the table
-    #     for row in range(self.table.rowCount()):
-    #         # Get the item in the "Field Name" column
-    #         field_name_item = self.table.item(row, 0)
-    #         # Get the item in the "Value" column
-    #         value_item = self.table.item(row, 1)
-    #         # If both items exist
-    #         if field_name_item and value_item:
-    #             # Get the text of the "Field Name" item
-    #             field_name = field_name_item.text()
-    #             # Get the text of the "Value" item
-    #             value = value_item.text()
-    #             # Add the field name and value to the metadata dictionary
-    #             metadata_dict[field_name] = value
-    #
-    #     # Check if padding is enabled
-    #     use_padding = self.use_padding_checkbox.isChecked()
-    #
-    #     # Check if padding is enabled and the padding value is valid
-    #     if use_padding:
-    #         padding_value = self.padding_lineedit.text()
-    #         if not padding_value or not padding_value.isdigit():
-    #             QMessageBox.critical(self, "Error",
-    #                                  "Padding value must be a non-empty number when 'Use New Padding' is checked.")
-    #             return
-    #
-    #     # Get selected items from the list widget
-    #     selected_items = self.list_widget.selectedItems()
-    #     if selected_items:
-    #         # Get the filepath of the selected item
-    #         filepath = selected_items[0].text()
-    #         try:
-    #             # Open the FLAC file
-    #             flac = File(filepath)
-    #
-    #             # Clear existing tags
-    #             if flac.tags:
-    #                 flac.tags.clear()
-    #
-    #             # Set metadata tags
-    #             for k, v in metadata_dict.items():
-    #                 flac[k] = v
-    #
-    #             if use_padding:
-    #                 # Save FLAC file with new padding
-    #                 flac.save(padding=self.new_padding)
-    #             else:
-    #                 # Save FLAC file without new padding
-    #                 flac.save()
-    #             # Display success message
-    #             QMessageBox.information(self, "Success", "Tags saved successfully.")
-    #         except Exception as e:
-    #             QMessageBox.critical(self, "Error", f"Failed to save tags to {filepath}: {str(e)}")
-    #             self.table.setRowCount(0)  # Clear the table
-    #             return
-    #     else:
-    #         QMessageBox.warning(self, "Warning", "Please select a FLAC file first.")
-    #         return
 
     def saveFLAC(self):
         """Save metadata to a FLAC file."""
@@ -905,8 +740,8 @@ class CoverWindow(QDialog):
             picture.height = height
             picture.depth = depth
         except ValueError:
-            QMessageBox.critical(self, "Error",
-                                 "Invalid input. Please enter valid numbers for height, width, and depth.")
+            QMessageBox.critical(self, "Error", "Invalid input. Please enter valid numbers for height, width, "
+                                                "and depth.")
             return
 
         picture.desc = self.desc_edit.text()
@@ -926,7 +761,6 @@ class CoverWindow(QDialog):
                 with open(file_path, "rb") as file:
                     image_data = file.read()
                 # 将新图片显示在图片组件中
-
                 self.picdata = image_data
 
                 img = QImage()
@@ -959,8 +793,7 @@ def format_size(size_bytes):
     return "{:.2f} {}".format(size_bytes, units[unit_index])
 
 
-
-class MetadataWindow(QDialog):
+class BlocksWindow(QDialog):
     def __init__(self, flac_path):
         super().__init__()
         self.resize(600, 400)
@@ -972,12 +805,11 @@ class MetadataWindow(QDialog):
         self.blocks_table.setColumnWidth(0, 150)
         self.blocks_table.setColumnWidth(1, 300)
 
-
         layout = QVBoxLayout()
         layout.addWidget(self.blocks_table)
 
+        self.details_button = QPushButton("Details")
         self.delete_button = QPushButton("Delete")
-        self.edit_button = QPushButton("Edit")
         self.save_button = QPushButton("Save")
         self.close_button = QPushButton("Close")
 
@@ -985,13 +817,12 @@ class MetadataWindow(QDialog):
         layout.addWidget(self.blocks_table)
 
         button_layout = QHBoxLayout()
-        button_layout.addWidget(self.edit_button)
+        button_layout.addWidget(self.details_button)
         button_layout.addWidget(self.delete_button)
         button_layout.addWidget(self.save_button)
         button_layout.addWidget(self.close_button)
 
         layout.addLayout(button_layout)
-
 
         self.setLayout(layout)
 
@@ -999,16 +830,11 @@ class MetadataWindow(QDialog):
 
         # 按钮绑定事件
         self.delete_button.clicked.connect(self.deleteBlock)
-        self.edit_button.clicked.connect(self.editBlock)
+        self.details_button.clicked.connect(self.showBlockDetails)
         self.save_button.clicked.connect(self.saveBlocks)
         self.close_button.clicked.connect(self.close)
 
         self.blocks_table.setEditTriggers(QTableWidget.NoEditTriggers)
-
-
-    def showBlockDetails(self, code):
-        QMessageBox.information(self, "Block Details", f"Block Code: {code}")
-
 
     def loadMetadataBlocks(self):
         if not self.flac_path:
@@ -1030,16 +856,9 @@ class MetadataWindow(QDialog):
                 self.blocks_table.insertRow(self.blocks_table.rowCount())
                 self.blocks_table.setItem(i, 0, QTableWidgetItem(str(block.code)))
                 self.blocks_table.setItem(i, 1, QTableWidgetItem(block_type))
-                # self.blocks_table.setItem(i, 3, QTableWidgetItem(block_data))
-                #
-                # # 添加按钮到每一行的最后一列
-                # button = QPushButton("Details")
-                # button.clicked.connect(lambda checked, code=block.code: self.showBlockDetails(code))
-                # self.blocks_table.setCellWidget(i, 3, button)
-        except Exception as e:
-            QMessageBox.critical(self, "Error",
-                                f"Error loading metadata blocks: {e}")
 
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Error loading metadata blocks: {e}")
 
     def deleteBlock(self):
         # 删除块信息的事件处理程序
@@ -1062,7 +881,7 @@ class MetadataWindow(QDialog):
         else:
             QMessageBox.warning(self, "Warning", "Please select a block to delete.")
 
-    def editBlock(self):
+    def showBlockDetails(self):
         # 编辑块信息的事件处理程序
         # 获取选中的行
         selected_row = self.blocks_table.currentRow()
@@ -1071,7 +890,6 @@ class MetadataWindow(QDialog):
             block_code_item = self.blocks_table.item(selected_row, 0)
             block_code = int(block_code_item.text())
             if block_code == 6:
-                # 如果块代码为6，打开CoverWindow
                 cover_window = CoverWindow(self.flac_path)
                 cover_window.exec_()
             elif block_code == 0:
@@ -1079,9 +897,9 @@ class MetadataWindow(QDialog):
                 info_window.exec_()
             else:
                 # 如果块代码为其他，弹出消息框提示该块代码
-                QMessageBox.information(self, "Block Code", f"The block code is: {block_code}")
+                QMessageBox.critical(self, "Error", f"No support for showing details of this block, block code is: {block_code}")
         else:
-            QMessageBox.warning(self, "Warning", "Please select a block to edit.")
+            QMessageBox.warning(self, "Warning", "Please select a block.")
 
     def saveBlocks(self):
         # 保存块信息的事件处理程序
@@ -1095,8 +913,8 @@ class MetadataWindow(QDialog):
                 block_code = int(block_code_item.text())
                 block_codes.append(block_code)
         # 打印块代码列表
-        QMessageBox.information(self, "", f"Block codes: {block_codes}")
-        print("Block Codes:", block_codes)
+        QMessageBox.information(self, "", f"{block_codes}")
+
 
 class InfoWindow(QDialog):
     def __init__(self, flac_path):
@@ -1111,62 +929,56 @@ class InfoWindow(QDialog):
         layout = QGridLayout()
 
         # Add QLabel and QLineEdit for each property
-        self.file_name_label = QLabel("File Name:")
-        self.file_name_edit = QLineEdit(os.path.basename(flac_path))
-        layout.addWidget(self.file_name_label, 0, 0)
-        layout.addWidget(self.file_name_edit, 0, 1)
 
         self.file_hash_label = QLabel("File Hash:")
         self.file_hash_edit = QLineEdit()
         self.file_hash_edit.setReadOnly(True)  # Read-only
-        layout.addWidget(self.file_hash_label, 1, 0)
-        layout.addWidget(self.file_hash_edit, 1, 1)
+        layout.addWidget(self.file_hash_label, 0, 0)
+        layout.addWidget(self.file_hash_edit, 0, 1)
 
-        self.md5_label = QLabel("MD5:")
+        self.md5_label = QLabel("Audio MD5:")
         self.md5_edit = QLineEdit()
-        self.md5_edit.setReadOnly(False)  # Read-only
-        layout.addWidget(self.md5_label, 2, 0)
-        layout.addWidget(self.md5_edit, 2, 1)
+        self.md5_edit.setReadOnly(False)
+        layout.addWidget(self.md5_label, 1, 0)
+        layout.addWidget(self.md5_edit, 1, 1)
 
         self.bits_per_sample_label = QLabel("Bits Per Sample:")
         self.bits_per_sample_edit = QLineEdit()
         self.bits_per_sample_edit.setReadOnly(True)  # Read-only
-        layout.addWidget(self.bits_per_sample_label, 3, 0)
-        layout.addWidget(self.bits_per_sample_edit, 3, 1)
+        layout.addWidget(self.bits_per_sample_label, 2, 0)
+        layout.addWidget(self.bits_per_sample_edit, 2, 1)
 
         self.sample_rate_label = QLabel("Sample Rate:")
         self.sample_rate_edit = QLineEdit()
         self.sample_rate_edit.setReadOnly(True)  # Read-only
-        layout.addWidget(self.sample_rate_label, 4, 0)
-        layout.addWidget(self.sample_rate_edit, 4, 1)
+        layout.addWidget(self.sample_rate_label, 3, 0)
+        layout.addWidget(self.sample_rate_edit, 3, 1)
 
         self.bit_rate_label = QLabel("Bit Rate:")
         self.bit_rate_edit = QLineEdit()
         self.bit_rate_edit.setReadOnly(True)  # Read-only
-        layout.addWidget(self.bit_rate_label, 5, 0)
-        layout.addWidget(self.bit_rate_edit, 5, 1)
+        layout.addWidget(self.bit_rate_label, 4, 0)
+        layout.addWidget(self.bit_rate_edit, 4, 1)
 
         self.length_label = QLabel("Length:")
         self.length_edit = QLineEdit()
         self.length_edit.setReadOnly(True)  # Read-only
-        layout.addWidget(self.length_label, 6, 0)
-        layout.addWidget(self.length_edit, 6, 1)
+        layout.addWidget(self.length_label, 5, 0)
+        layout.addWidget(self.length_edit, 5, 1)
 
         self.padding_length_label = QLabel("Padding Length:")
         self.padding_length_edit = QLineEdit()
         self.padding_length_edit.setReadOnly(True)  # Read-only
-        layout.addWidget(self.padding_length_label, 7, 0)
-        layout.addWidget(self.padding_length_edit, 7, 1)
+        layout.addWidget(self.padding_length_label, 6, 0)
+        layout.addWidget(self.padding_length_edit, 6, 1)
 
         self.vendor_string_label = QLabel("Vendor String:")
         self.vendor_string_edit = QLineEdit()
-        self.vendor_string_edit.setReadOnly(False)  # Read-only
-        layout.addWidget(self.vendor_string_label, 8, 0)
-        layout.addWidget(self.vendor_string_edit, 8, 1)
+        self.vendor_string_edit.setReadOnly(False)
+        layout.addWidget(self.vendor_string_label, 7, 0)
+        layout.addWidget(self.vendor_string_edit, 7, 1)
 
         # Add OK and Cancel buttons
-
-
         ok_button = QPushButton("Save")
         cancel_button = QPushButton("Cancel")
         # 创建按钮布局
@@ -1177,9 +989,6 @@ class InfoWindow(QDialog):
         ok_button.clicked.connect(self.accept)
         cancel_button.clicked.connect(self.reject)
         layout.addLayout(button_layout, 9, 0, 1, 2)
-
-        # layout.addWidget(ok_button, 9, 0)
-        # layout.addWidget(cancel_button, 9, 1)
 
         self.setLayout(layout)
 
@@ -1196,17 +1005,6 @@ class InfoWindow(QDialog):
             tuple: A tuple containing file hash, MD5 signature, bits per sample, sample rate,
                 bitrate, length, padding length, and vendor string.
         """
-
-        # Initialize variables to store FLAC information
-        file_hash = ''
-        md5 = ''
-        bits_per_sample = ''
-        sample_rate = ''
-        bitrate = ''
-        length = ''
-        padding_length = ''
-        vendor_string = ''
-
         try:
             # Calculate file hash
             file_hash = get_hash(filepath)
@@ -1217,30 +1015,29 @@ class InfoWindow(QDialog):
 
             # Get FLAC file information
             md5 = hex(info.md5_signature).split('x')[-1]
-            sample_rate = info.sample_rate / 1000
-            bits_per_sample = info.bits_per_sample
-            bitrate = bits_per_second_to_kbps(info.bitrate)
+            sample_rate = f"{info.sample_rate / 1000} kHz"
+            bits_per_sample = f"{info.bits_per_sample} bit"
+            bitrate = f"{bits_per_second_to_kbps(info.bitrate)} kbps"
             length = format_seconds(info.length)
 
             # Get padding length
-            for block in flac.metadata_blocks:
-                if block.code == 1:
-                    padding_length = block.length
+            padding_length = next((block.length for block in flac.metadata_blocks if block.code == 1), '')
 
             # Get vendor string
             vendor_string = flac.tags.vendor
 
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to read FLAC information: {str(e)}")
+            return '', '', '', '', '', '', '', ''
 
         # Return FLAC information
         return file_hash, md5, bits_per_sample, sample_rate, bitrate, length, padding_length, vendor_string
 
     def showFLACInfo(self):
         try:
-
-
-            file_hash, md5, bits_per_sample, sample_rate, bitrate, length, padding_length, vendor_string = self.getFLACInfo(self.flac_path)
+            # Get FLAC information
+            file_hash, md5, bits_per_sample, sample_rate, bitrate, length, padding_length, vendor_string = self.getFLACInfo(
+                self.flac_path)
 
             # Update the corresponding QLineEdit widgets
             self.file_hash_edit.setText(file_hash)
@@ -1254,7 +1051,6 @@ class InfoWindow(QDialog):
 
         except Exception as e:
             print(f"Error loading FLAC information: {e}")
-
 
 
 if __name__ == '__main__':
