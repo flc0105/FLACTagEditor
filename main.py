@@ -4,13 +4,13 @@ import os
 import sys
 
 from PyQt5 import QtWidgets
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QDropEvent, QBrush, QColor
+from PyQt5.QtCore import Qt, QSize, QEvent
+from PyQt5.QtGui import QDropEvent, QBrush, QColor, QPixmap, QImageReader, QImage
 from PyQt5.QtWidgets import QAbstractItemView, QApplication, QWidget, QVBoxLayout, QTableWidget, QTableWidgetItem, \
     QHeaderView, QListWidget, QPushButton, QFileDialog, QMessageBox, QDesktopWidget, QHBoxLayout, \
-    QLineEdit, QCheckBox
+    QLineEdit, QCheckBox, QDialog, QLabel, QFormLayout, QMenu, QAction
 from mutagen import File
-from mutagen.flac import FLAC
+from mutagen.flac import FLAC, Picture
 
 
 class TableWidgetDragRows(QTableWidget):
@@ -188,6 +188,9 @@ class FLACTagEditor(QWidget):
         self.info_button = QPushButton('Show FLAC Info', self)
         self.info_button.clicked.connect(self.showFLACInfo)
 
+        self.set_cover_button = QPushButton("Set Cover")
+        self.set_cover_button.clicked.connect(self.show_cover_window)
+
         # Create a button for deleting selected files.
         self.delete_button = QPushButton('Delete', self)
         self.delete_button.clicked.connect(self.deleteSelectedFiles)
@@ -201,6 +204,7 @@ class FLACTagEditor(QWidget):
         top_buttons_layout = QHBoxLayout()
         top_buttons_layout.addWidget(self.import_button)
         top_buttons_layout.addWidget(self.info_button)
+        top_buttons_layout.addWidget(self.set_cover_button)
         top_buttons_layout.addWidget(self.delete_button)
         top_buttons_layout.addWidget(self.clear_button)
 
@@ -282,6 +286,15 @@ class FLACTagEditor(QWidget):
         cp = QDesktopWidget().availableGeometry().center()
         qr.moveCenter(cp)
         self.move(qr.topLeft())
+
+    def show_cover_window(self):
+        selected_items = self.list_widget.selectedItems()
+        if selected_items:
+            filepath = selected_items[0].text()
+            cover_window = CoverWindow(filepath)
+            cover_window.exec_()
+        else:
+            QMessageBox.warning(self, "Warning", "Please select a FLAC file first.")
 
     def importFLAC(self):
         """Import FLAC files."""
@@ -418,8 +431,9 @@ class FLACTagEditor(QWidget):
                 is_same_tags = all(tag_fields[0] == tag_list for tag_list in tag_fields)
 
                 if not is_same_tags:
+                    self.table.setRowCount(0)
                     QMessageBox.critical(self, "Error", "Selected files have different tag fields or orders.")
-                    self.list_widget.clearSelection()
+                    # self.list_widget.clearSelection()
                     return
 
                 # 清空表格并设置行数
@@ -735,6 +749,265 @@ def bits_per_second_to_kbps(bits_per_second):
     """
     kbps = round(bits_per_second / 1000)
     return kbps
+class CoverWindow(QDialog):
+    def __init__(self, flac_path):
+        super().__init__()
+
+        self.resize(400, 400)  # 设置窗口的初始大小
+
+        self.flac_path = flac_path
+        self.setWindowTitle("Set Cover")
+        self.cover_label = QLabel()
+        self.cover_label.setAlignment(Qt.AlignCenter)
+
+        self.file_size_label = QLabel()
+
+        self.resolution_label = QLabel()
+
+        self.height_label = QLabel("Height:")
+        self.width_label = QLabel("Width:")
+        self.depth_label = QLabel("Depth:")
+        self.desc_label = QLabel("Description:")
+        self.height_edit = QLineEdit()
+        self.width_edit = QLineEdit()
+        self.depth_edit = QLineEdit()
+        self.desc_edit = QLineEdit()
+
+        # self.save_button = QPushButton("Save")
+        # self.cancel_button = QPushButton("Cancel")
+        # self.auto_button = QPushButton("Auto")
+
+        self.save_button = QPushButton("Save")
+        # self.auto_button = QPushButton("Auto")
+        self.cancel_button = QPushButton("Cancel")
+
+        # 创建表单布局
+        form_layout = QFormLayout()
+        form_layout.addRow(self.height_label, self.height_edit)
+        form_layout.addRow(self.width_label, self.width_edit)
+        form_layout.addRow(self.depth_label, self.depth_edit)
+        form_layout.addRow(self.desc_label, self.desc_edit)
+        form_layout.addRow(self.file_size_label)
+        form_layout.addRow(self.resolution_label)
+
+        # 创建按钮布局
+        button_layout = QHBoxLayout()
+        button_layout.addWidget(self.save_button)
+        # button_layout.addWidget(self.auto_button)
+        button_layout.addWidget(self.cancel_button)
+
+
+        layout = QVBoxLayout()
+        layout.addWidget(self.cover_label)
+        layout.addWidget(self.file_size_label)
+        layout.addWidget(self.resolution_label)
+        layout.addWidget(self.width_label)
+        layout.addWidget(self.width_edit)
+        layout.addWidget(self.height_label)
+        layout.addWidget(self.height_edit)
+
+        layout.addWidget(self.depth_label)
+        layout.addWidget(self.depth_edit)
+        layout.addWidget(self.desc_label)
+        layout.addWidget(self.desc_edit)
+        layout.addLayout(button_layout)
+
+
+
+        # layout.addWidget(self.save_button)
+        # layout.addWidget(self.auto_button)
+        # layout.addWidget(self.cancel_button)
+
+
+
+
+
+        self.setLayout(layout)
+
+        self.showCoverImage(self.flac_path)
+
+        self.save_button.clicked.connect(self.saveTags)
+        # self.auto_button.clicked.connect(self.autoFill)
+        self.cancel_button.clicked.connect(self.close)
+
+
+        # self.cover_label.mouseDoubleClickEvent = self.chooseImage
+        # 创建右键菜单
+        self.context_menu = QMenu(self)
+        self.import_action = QAction("Import", self)
+        self.export_action = QAction("Export", self)
+
+        # 将动作添加到右键菜单
+        self.context_menu.addAction(self.import_action)
+        self.context_menu.addAction(self.export_action)
+
+        self.import_action.triggered.connect(self.chooseImage)
+        # 为导出动作绑定槽函数
+        self.export_action.triggered.connect(self.exportCover)
+
+        # 在图片组件上安装事件过滤器
+        self.cover_label.installEventFilter(self)
+
+    def eventFilter(self, source, event):
+        """事件过滤器函数，捕获图片组件的右键点击事件，并显示右键菜单。"""
+        if source is self.cover_label and event.type() == QEvent.ContextMenu:
+            # 显示右键菜单
+            self.context_menu.exec_(event.globalPos())
+            return True
+        return super().eventFilter(source, event)
+
+    def exportCover(self):
+        """导出封面图片到文件."""
+        file_path, _ = QFileDialog.getSaveFileName(self, "Save Cover Image", "cover.jpg", "JPEG Files (*.jpg)")
+        if file_path:
+            # 将图片数据保存到文件
+            with open(file_path, 'wb') as f:
+                f.write(self.picdata)
+        QMessageBox.information(self, "Success", "Cover saved successfully.")
+
+    def showCoverImage(self, flac_path):
+        if not flac_path:
+            return
+        try:
+            audio = FLAC(flac_path)
+            pictures = audio.pictures
+            for p in pictures:
+                print(vars(p).keys())
+                if p.type == 3:
+                    self.picdata = p.data
+                    img = QImage()
+                    img.loadFromData(p.data)
+
+                    img_scaled = img.scaled(200, 200, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+
+                    # 打开设置好的图片
+                    pixmap = QPixmap(img_scaled)
+
+                    self.cover_label.setPixmap(pixmap)
+
+                    pic_len = len(self.picdata)
+                    self.file_size_label.setText(f"File Size: {format_size(pic_len)} ({pic_len})")
+                    self.resolution_label.setText(f"Resolution: {img.size().width()}x{img.size().height()}")
+
+                    self.width_edit.setText(str(p.width))
+                    self.height_edit.setText(str(p.height))
+                    self.depth_edit.setText(str(p.depth))
+                    self.desc_edit.setText(str(p.desc))
+
+                    return  # Exit after displaying the first cover
+            # If no cover found, clear cover label
+            self.cover_label.clear()
+
+
+        except Exception as e:
+            print(f"Error displaying cover image: {e}")
+    def saveTags(self):
+        if not self.flac_path:
+            return
+        if not self.picdata:
+            return
+        audio = FLAC(self.flac_path)
+        pictures = audio.pictures
+        print(pictures)
+        picture = Picture()
+        picture.type = 3
+        picture.mime = 'image/jpeg'
+        picture.data = self.picdata
+
+        try:
+            height_text = self.height_edit.text()
+            width_text = self.width_edit.text()
+            depth_text = self.depth_edit.text()
+
+            # 如果文本框中的文本为空，则将相应的值设置为None
+            height = int(height_text) if height_text else None
+            width = int(width_text) if width_text else None
+            depth = int(depth_text) if depth_text else None
+
+            picture.width =width
+            picture.height = height
+            picture.depth = depth
+        except ValueError:
+            QMessageBox.critical(self, "Error",
+                                 "Invalid input. Please enter valid numbers for height, width, and depth.")
+            return
+
+
+        picture.desc = self.desc_edit.text()
+        audio.clear_pictures()
+        audio.add_picture(picture)
+        audio.save()
+        QMessageBox.information(self, "Success", "Cover saved successfully.")
+
+
+    # def autoFill(self):
+    #     try:
+    #         if self.picdata:
+    #
+    #             image_data = self.picdata
+    #             image = QImage.fromData(image_data)
+    #
+    #             # 获取图片的尺寸和深度
+    #             size = image.size()
+    #             depth = image.depth()
+    #
+    #             # 填充到文本框
+    #             self.height_edit.setText(str(size.height()))
+    #             self.width_edit.setText(str(size.width()))
+    #             self.depth_edit.setText(str(depth))
+    #
+    #         else:
+    #
+    #             self.height_edit.clear()
+    #             self.width_edit.clear()
+    #             self.depth_edit.clear()
+    #     except Exception as e:
+    #         print(f"Error auto-filling image information: {e}")
+
+    def chooseImage(self): # event:
+        """Handle double-click event on the cover image."""
+        # if event.button() == Qt.LeftButton:
+        if True:
+            # 弹出文件选择对话框
+            file_path, _ = QFileDialog.getOpenFileName(self, "Select Image", "", "Image Files (*.jpg)")
+            if file_path:
+                # 读取新图片数据
+                with open(file_path, "rb") as file:
+                    image_data = file.read()
+                # 将新图片显示在图片组件中
+
+                self.picdata = image_data
+
+                img = QImage()
+                img.loadFromData(image_data)
+                img_scaled = img.scaled(200, 200, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                pixmap = QPixmap(img_scaled)
+                self.cover_label.setPixmap(pixmap)
+
+
+
+                pic_len = len(self.picdata)
+                self.file_size_label.setText(f"File Size: {format_size(pic_len)} ({pic_len})")
+                self.resolution_label.setText(f"Resolution: {img.size().width()}x{img.size().height()}")
+
+                self.width_edit.setText(str(img.size().width()))
+                self.height_edit.setText(str(img.size().height()))
+                self.depth_edit.setText(str(img.depth()))
+
+
+def format_size(size_bytes):
+    """Convert bytes to a human-readable format."""
+    if size_bytes == 0:
+        return "0 B"
+    # 定义单位和对应的字节大小
+    units = ["B", "KB", "MB", "GB", "TB"]
+    unit_index = 0
+    # 从字节单位开始逐级增加
+    while size_bytes >= 1024 and unit_index < len(units) - 1:
+        size_bytes /= 1024
+        unit_index += 1
+    # 格式化输出结果，保留两位小数
+    return "{:.2f} {}".format(size_bytes, units[unit_index])
 
 
 if __name__ == '__main__':
@@ -742,3 +1015,5 @@ if __name__ == '__main__':
     window = FLACTagEditor()
     window.show()
     sys.exit(app.exec_())
+
+
