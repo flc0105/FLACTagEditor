@@ -805,6 +805,9 @@ class BlocksWindow(QDialog):
         self.blocks_table.setColumnWidth(0, 150)
         self.blocks_table.setColumnWidth(1, 300)
 
+        # 设置表格选择模式为单选
+        self.blocks_table.setSelectionMode(QAbstractItemView.SingleSelection)
+
         layout = QVBoxLayout()
         layout.addWidget(self.blocks_table)
 
@@ -827,13 +830,13 @@ class BlocksWindow(QDialog):
         self.setLayout(layout)
 
         self.block_types = {
-        0: 'STREAMINFO',
-        1: 'PADDING',
-        2: 'APPLICATION',
-        3: 'SEEKTABLE',
-        4: 'VORBIS COMMENT',
-        6: 'PICTURE'
-    }
+            0: 'STREAMINFO',
+            1: 'PADDING',
+            2: 'APPLICATION',
+            3: 'SEEKTABLE',
+            4: 'VORBIS COMMENT',
+            6: 'PICTURE'
+        }
 
         self.loadMetadataBlocks()
 
@@ -845,7 +848,8 @@ class BlocksWindow(QDialog):
 
         self.blocks_table.setEditTriggers(QTableWidget.NoEditTriggers)
 
-
+        # 双击行触发显示详细信息的槽函数
+        self.blocks_table.cellDoubleClicked.connect(self.showBlockDetails)
 
     def loadMetadataBlocks(self):
         if not self.flac_path:
@@ -879,12 +883,12 @@ class BlocksWindow(QDialog):
                 QMessageBox.warning(self, "Warning", f"{self.block_types.get(block_code)} block cannot be deleted.")
             else:
                 # 如果块代码不是0，弹出询问框确认删除
-                reply = QMessageBox.question(self, "Confirmation", f"Are you sure you want to delete {self.block_types.get(block_code, "this")} block?",
+                reply = QMessageBox.question(self, "Confirmation",
+                                             f"Are you sure you want to delete {self.block_types.get(block_code, "this")} block?",
                                              QMessageBox.Yes | QMessageBox.No)
                 if reply == QMessageBox.Yes:
                     # 用户确认删除，删除选中的行
                     self.blocks_table.removeRow(row.row())
-
 
     def showBlockDetails(self):
 
