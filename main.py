@@ -440,6 +440,9 @@ class FLACTagEditor(QWidget):
 
         # Get selected rows
         selected_rows = self.table.selectionModel().selectedRows()
+
+        if not selected_rows:
+            QMessageBox.critical(self, "Error", "Please select a row.")
         # Iterate over selected rows in reverse order
         for row in reversed(selected_rows):
             # Remove the row from the table
@@ -687,7 +690,6 @@ class CoverWindow(QDialog):
             audio = FLAC(flac_path)
             pictures = audio.pictures
             for p in pictures:
-                print(vars(p).keys())
                 if p.type == 3:
                     self.picdata = p.data
                     img = QImage()
@@ -719,8 +721,6 @@ class CoverWindow(QDialog):
         if not self.picdata:
             return
         audio = FLAC(self.flac_path)
-        pictures = audio.pictures
-        print(pictures)
         picture = Picture()
         picture.type = 3
         picture.mime = 'image/jpeg'
@@ -826,6 +826,15 @@ class BlocksWindow(QDialog):
 
         self.setLayout(layout)
 
+        self.block_types = {
+        0: 'STREAMINFO',
+        1: 'PADDING',
+        2: 'APPLICATION',
+        3: 'SEEKTABLE',
+        4: 'VORBIS COMMENT',
+        6: 'PICTURE'
+    }
+
         self.loadMetadataBlocks()
 
         # 按钮绑定事件
@@ -836,21 +845,16 @@ class BlocksWindow(QDialog):
 
         self.blocks_table.setEditTriggers(QTableWidget.NoEditTriggers)
 
+
+
     def loadMetadataBlocks(self):
         if not self.flac_path:
             return
         try:
             flac = FLAC(self.flac_path)
-            block_types = {
-                0: 'STREAMINFO',
-                1: 'PADDING',
-                2: 'APPLICATION',
-                3: 'SEEKTABLE',
-                4: 'VORBIS COMMENT',
-                6: 'PICTURE'
-            }
+
             for i, block in enumerate(flac.metadata_blocks):
-                block_type = block_types.get(block.code, "Unknown")
+                block_type = self.block_types.get(block.code, "Unknown")
                 # block_data = str(block)
 
                 self.blocks_table.insertRow(self.blocks_table.rowCount())
@@ -861,33 +865,36 @@ class BlocksWindow(QDialog):
             QMessageBox.critical(self, "Error", f"Error loading metadata blocks: {e}")
 
     def deleteBlock(self):
-        # 删除块信息的事件处理程序
-        # 获取选中的行
-        selected_row = self.blocks_table.currentRow()
-        if selected_row != -1:
-            # 获取选中行的块代码
-            block_code_item = self.blocks_table.item(selected_row, 0)
+
+        selected_rows = self.blocks_table.selectionModel().selectedRows()
+
+        if not selected_rows:
+            QMessageBox.critical(self, "Error", "Please select a block.")
+
+        for row in selected_rows:
+            block_code_item = self.blocks_table.item(row.row(), 0)  # 获取当前行的块代码
             block_code = int(block_code_item.text())
             if block_code == 0:
                 # 如果块代码为0，提示不允许删除
-                QMessageBox.warning(self, "Warning", "Streaminfo block cannot be deleted.")
+                QMessageBox.warning(self, "Warning", f"{self.block_types.get(block_code)} block cannot be deleted.")
             else:
                 # 如果块代码不是0，弹出询问框确认删除
-                reply = QMessageBox.question(self, "Confirmation", "Are you sure you want to delete this block?",
+                reply = QMessageBox.question(self, "Confirmation", f"Are you sure you want to delete {self.block_types.get(block_code, "this")} block?",
                                              QMessageBox.Yes | QMessageBox.No)
                 if reply == QMessageBox.Yes:
                     # 用户确认删除，删除选中的行
-                    self.blocks_table.removeRow(selected_row)
-        else:
-            QMessageBox.warning(self, "Warning", "Please select a block to delete.")
+                    self.blocks_table.removeRow(row.row())
+
 
     def showBlockDetails(self):
-        # 编辑块信息的事件处理程序
-        # 获取选中的行
-        selected_row = self.blocks_table.currentRow()
-        if selected_row != -1:
-            # 获取选中行的块代码
-            block_code_item = self.blocks_table.item(selected_row, 0)
+
+        selected_rows = self.blocks_table.selectionModel().selectedRows()
+
+        if not selected_rows:
+            QMessageBox.critical(self, "Error", "Please select a block.")
+
+        for row in selected_rows:
+            block_code_item = self.blocks_table.item(row.row(), 0)  # 获取当前行的块代码
             block_code = int(block_code_item.text())
             if block_code == 6:
                 cover_window = CoverWindow(self.flac_path)
@@ -897,9 +904,8 @@ class BlocksWindow(QDialog):
                 info_window.exec_()
             else:
                 # 如果块代码为其他，弹出消息框提示该块代码
-                QMessageBox.critical(self, "Error", f"No support for showing details of this block, block code is: {block_code}")
-        else:
-            QMessageBox.warning(self, "Warning", "Please select a block.")
+                QMessageBox.critical(self, "Error",
+                                     f"No support for showing details of {self.block_types.get(block_code, "this")} block.")
 
     def saveBlocks(self):
         # 保存块信息的事件处理程序
