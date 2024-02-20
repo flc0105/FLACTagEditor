@@ -284,8 +284,16 @@ class FLACTagEditor(QWidget):
     def show_blocks_window(self):
         selected_items = self.list_widget.selectedItems()
         if selected_items:
-            filepath = selected_items[0].text()
-            cover_window = BlocksWindow(filepath)
+            # filepath = selected_items[0].text()
+
+            # 创建一个列表来存储选中项目的文本
+            selected_paths = []
+
+            # 将选中项目的文本添加到列表中
+            for item in selected_items:
+                selected_paths.append(item.text())
+
+            cover_window = BlocksWindow(selected_paths)
             cover_window.exec_()
         else:
             QMessageBox.warning(self, "Warning", "Please select a FLAC file first.")
@@ -604,12 +612,10 @@ def bits_per_second_to_kbps(bits_per_second):
 
 
 class CoverWindow(QDialog):
-    # TODO: 批量修改
     def __init__(self, flac_path):
         super().__init__()
 
         self.resize(400, 400)  # 设置窗口的初始大小
-
         self.flac_path = flac_path
         self.setWindowTitle("Set Cover")
         self.cover_label = QLabel()
@@ -676,18 +682,46 @@ class CoverWindow(QDialog):
 
     def exportCover(self):
         """导出封面图片到文件."""
+        if self.picdata is None:
+            QMessageBox.information(self, "Error", "No cover to save.")
+            return
         file_path, _ = QFileDialog.getSaveFileName(self, "Save Cover Image", "cover.jpg", "JPEG Files (*.jpg)")
         if file_path:
             # 将图片数据保存到文件
             with open(file_path, 'wb') as f:
                 f.write(self.picdata)
-        QMessageBox.information(self, "Success", "Cover saved successfully.")
+            QMessageBox.information(self, "Success", "Cover saved successfully.")
+
+    def checkCoverConsistency(self, flac_paths):
+        first_pic_data = None
+        for flac_path in flac_paths:
+            try:
+                audio = FLAC(flac_path)
+                pictures = audio.pictures
+                for p in pictures:
+                    if p.type == 3:
+                        if first_pic_data is None:
+                            first_pic_data = p.data
+                        elif first_pic_data != p.data:
+                            # QMessageBox.warning(self, "Warning", "Cover images are not consistent among FLAC files.")
+                            return False
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Error loading cover image: {e}")
+                return False
+        return True
 
     def showCoverImage(self, flac_path):
         if not flac_path:
             return
         try:
-            audio = FLAC(flac_path)
+
+            if len(flac_path) > 1:  # 只有一张图片就不需要判断了
+                if not self.checkCoverConsistency(flac_path):
+                    self.cover_label.setFixedHeight(200)
+                    self.cover_label.setText("Multiple images")
+                    return
+
+            audio = FLAC(flac_path[0])
             pictures = audio.pictures
             for p in pictures:
                 if p.type == 3:
@@ -720,35 +754,67 @@ class CoverWindow(QDialog):
             return
         if not self.picdata:
             return
-        audio = FLAC(self.flac_path)
-        picture = Picture()
-        picture.type = 3
-        picture.mime = 'image/jpeg'
-        picture.data = self.picdata
 
-        try:
+        if len(self.flac_path) > 1:
+
+            picture = Picture()
+            picture.type = 3
+            picture.mime = 'image/jpeg'
+            picture.data = self.picdata
             height_text = self.height_edit.text()
             width_text = self.width_edit.text()
             depth_text = self.depth_edit.text()
-
-            # 如果文本框中的文本为空，则将相应的值设置为None
-            height = int(height_text) if height_text else None
-            width = int(width_text) if width_text else None
-            depth = int(depth_text) if depth_text else None
+            try:
+                height = int(height_text) if height_text else None
+                width = int(width_text) if width_text else None
+                depth = int(depth_text) if depth_text else None
+            except ValueError:
+                QMessageBox.critical(self, "Error", "Invalid input. Please enter valid numbers for height, width, "
+                                                    "and depth.")
+                return
 
             picture.width = width
             picture.height = height
             picture.depth = depth
-        except ValueError:
-            QMessageBox.critical(self, "Error", "Invalid input. Please enter valid numbers for height, width, "
-                                                "and depth.")
-            return
+            picture.desc = self.desc_edit.text()
 
-        picture.desc = self.desc_edit.text()
-        audio.clear_pictures()
-        audio.add_picture(picture)
-        audio.save()
-        QMessageBox.information(self, "Success", "Tags saved successfully.")
+            for path in self.flac_path:
+                audio = FLAC(path)
+                audio.clear_pictures()
+                audio.add_picture(picture)
+                audio.save()
+
+            QMessageBox.information(self, "Success", "All tags saved successfully.")
+        else:
+            audio = FLAC(self.flac_path[0])
+            picture = Picture()
+            picture.type = 3
+            picture.mime = 'image/jpeg'
+            picture.data = self.picdata
+
+            try:
+                height_text = self.height_edit.text()
+                width_text = self.width_edit.text()
+                depth_text = self.depth_edit.text()
+
+                # 如果文本框中的文本为空，则将相应的值设置为None
+                height = int(height_text) if height_text else None
+                width = int(width_text) if width_text else None
+                depth = int(depth_text) if depth_text else None
+
+                picture.width = width
+                picture.height = height
+                picture.depth = depth
+            except ValueError:
+                QMessageBox.critical(self, "Error", "Invalid input. Please enter valid numbers for height, width, "
+                                                    "and depth.")
+                return
+
+            picture.desc = self.desc_edit.text()
+            audio.clear_pictures()
+            audio.add_picture(picture)
+            audio.save()
+            QMessageBox.information(self, "Success", "Tags saved successfully.")
 
     def chooseImage(self):  # event:
         """Handle double-click event on the cover image."""
@@ -806,7 +872,7 @@ class BlocksWindow(QDialog):
         self.blocks_table.setColumnWidth(1, 300)
 
         # 设置表格选择模式为单选
-        self.blocks_table.setSelectionMode(QAbstractItemView.SingleSelection)
+        # self.blocks_table.setSelectionMode(QAbstractItemView.SingleSelection)
 
         layout = QVBoxLayout()
         layout.addWidget(self.blocks_table)
@@ -855,7 +921,32 @@ class BlocksWindow(QDialog):
         if not self.flac_path:
             return
         try:
-            flac = FLAC(self.flac_path)
+
+            block_counts = []
+            block_codes = []
+
+            if len(self.flac_path) > 1:
+                # 遍历每个 FLAC 文件路径
+                for path in self.flac_path:
+                    flac = FLAC(path)
+
+                    blocks_count = len(flac.metadata_blocks)  # 获取当前 FLAC 文件的元数据块数量
+                    block_counts.append(blocks_count)  # 将元数据块数量添加到列表中
+                    block_code = [block.code for block in flac.metadata_blocks]  # 获取当前 FLAC 文件的元数据块代码列表
+                    block_codes.append(block_code)  # 将元数据块代码列表添加到列表中
+
+                # 检查元数据块数量列表中的所有值是否都相同
+                if len(set(block_counts)) != 1:
+                    QMessageBox.critical(window, "Error", "Metadata blocks count is not consistent among FLAC files.")
+                    return
+
+                # 检查元数据块代码列表中的所有值是否都相同
+                if len(set(map(tuple, block_codes))) != 1:
+                    QMessageBox.critical(window, "Error",
+                                         "Metadata block codes combination is not consistent among FLAC files.")
+                    return
+
+            flac = FLAC(self.flac_path[0])
 
             for i, block in enumerate(flac.metadata_blocks):
                 block_type = self.block_types.get(block.code, "Unknown")
@@ -901,6 +992,7 @@ class BlocksWindow(QDialog):
             block_code_item = self.blocks_table.item(row.row(), 0)  # 获取当前行的块代码
             block_code = int(block_code_item.text())
             if block_code == 6:
+                # cover_window = CoverWindow(self.flac_path)
                 cover_window = CoverWindow(self.flac_path)
                 cover_window.exec_()
             elif block_code == 0:
@@ -912,27 +1004,62 @@ class BlocksWindow(QDialog):
                                      f"No support for showing details of {self.block_types.get(block_code, "this")} block.")
 
     def saveBlocks(self):
+
         # 保存块信息的事件处理程序
-        block_codes = []
+        new_block_codes = []
+
         # 遍历表格的每一行
         for row in range(self.blocks_table.rowCount()):
             # 获取当前行的第一列，即块代码
             block_code_item = self.blocks_table.item(row, 0)
             if block_code_item:
                 # 如果获取到了块代码，将其转换为整数并添加到列表中
-                block_code = int(block_code_item.text())
-                block_codes.append(block_code)
-        # 打印块代码列表
-        QMessageBox.information(self, "", f"{block_codes}")
+                old_block_codes = int(block_code_item.text())
+                new_block_codes.append(old_block_codes)
+
+        # flac = FLAC(self.flac_path[0])
+
+        for path in self.flac_path:
+            flac = FLAC(path)
+            bak = flac.metadata_blocks[:]
+            print(bak)
+            flac.metadata_blocks.clear()
+            print(bak)
+            for new_index, block_code_value in enumerate(new_block_codes):
+                elm = next((block for block in bak if block.code == block_code_value), None)
+                flac.metadata_blocks.insert(new_index, elm)
+
+            flac.save()
+
+        # 获取新的块代码列表
+        new_block_codes = [block.code for block in FLAC(self.flac_path[0]).metadata_blocks]
+
+
+        if new_block_codes[-1] != 1:
+            QMessageBox.warning(self, "警告",
+                                "修改完成，对PADDING作出的修改可能不会生效，PADDING必须在最后一位")
+        else:
+            QMessageBox.information(self, "成功", "修改完成")
 
 
 class InfoWindow(QDialog):
     def __init__(self, flac_path):
         super().__init__()
 
-        self.flac_path = flac_path
+        if flac_path:
+            self.flac_path = flac_path
+        else:
+            return
 
-        self.setWindowTitle(f"{os.path.basename(flac_path)}")
+        if len(self.flac_path) == 1:
+            # 如果只有一个文件，窗口标题为该文件名
+            self.setWindowTitle(f"{os.path.basename(self.flac_path[0])}")
+        else:
+            # 如果有多个文件，窗口标题为第一个文件名加上 “等 {文件数量} 个文件”
+            first_file = os.path.basename(self.flac_path[0])
+            remaining_files_count = len(self.flac_path) - 1
+            self.setWindowTitle(f"{first_file} 等 {remaining_files_count} 个文件")
+
         self.resize(500, 300)
 
         # Create layout
@@ -996,7 +1123,7 @@ class InfoWindow(QDialog):
         button_layout.addWidget(ok_button)
         button_layout.addWidget(cancel_button)
 
-        ok_button.clicked.connect(self.accept)
+        ok_button.clicked.connect(self.save_info)
         cancel_button.clicked.connect(self.reject)
         layout.addLayout(button_layout, 9, 0, 1, 2)
 
@@ -1004,6 +1131,30 @@ class InfoWindow(QDialog):
 
         # Get FLAC file information
         self.showFLACInfo()
+
+    def save_info(self):
+        for path in self.flac_path:
+            audio = FLAC(path)
+
+            vendor = self.vendor_string_edit.text()
+            md5 = self.md5_edit.text()
+
+            # 检查是否使用文本框的值
+            if vendor.startswith("<Multivalued>"):
+                vendor = audio.tags.vendor
+
+            if md5.startswith("<Multivalued>"):
+                hex_string = audio.info.md5_signature
+                if hex_string:
+                    md5 = hex_string
+
+            # 转换十六进制字符串为十进制值
+            decimal_value = int(md5, 16) if md5 else ""
+            audio.tags.vendor = vendor
+            audio.info.md5_signature = decimal_value
+
+            audio.save()
+        QMessageBox.information(self, "SAVED", "Ok")
 
     def getFLACInfo(self, filepath):
         """Get information about the FLAC file.
@@ -1015,6 +1166,7 @@ class InfoWindow(QDialog):
             tuple: A tuple containing file hash, MD5 signature, bits per sample, sample rate,
                 bitrate, length, padding length, and vendor string.
         """
+
         try:
             # Calculate file hash
             file_hash = get_hash(filepath)
@@ -1031,7 +1183,7 @@ class InfoWindow(QDialog):
             length = format_seconds(info.length)
 
             # Get padding length
-            padding_length = next((block.length for block in flac.metadata_blocks if block.code == 1), '')
+            padding_length = str(next((block.length for block in flac.metadata_blocks if block.code == 1), ''))
 
             # Get vendor string
             vendor_string = flac.tags.vendor
@@ -1044,23 +1196,72 @@ class InfoWindow(QDialog):
         return file_hash, md5, bits_per_sample, sample_rate, bitrate, length, padding_length, vendor_string
 
     def showFLACInfo(self):
-        try:
-            # Get FLAC information
-            file_hash, md5, bits_per_sample, sample_rate, bitrate, length, padding_length, vendor_string = self.getFLACInfo(
-                self.flac_path)
+        if not self.flac_path:
+            return
 
-            # Update the corresponding QLineEdit widgets
-            self.file_hash_edit.setText(file_hash)
-            self.md5_edit.setText(md5)
-            self.bits_per_sample_edit.setText(str(bits_per_sample))
-            self.sample_rate_edit.setText(str(sample_rate))
-            self.bit_rate_edit.setText(str(bitrate))
-            self.length_edit.setText(str(length))
-            self.padding_length_edit.setText(str(padding_length))
-            self.vendor_string_edit.setText(vendor_string)
+        if len(self.flac_path) == 1:
+            try:
+                # Get FLAC information
+                file_hash, md5, bits_per_sample, sample_rate, bitrate, length, padding_length, vendor_string = self.getFLACInfo(
+                    self.flac_path[0])
 
-        except Exception as e:
-            print(f"Error loading FLAC information: {e}")
+                # Update the corresponding QLineEdit widgets
+                self.file_hash_edit.setText(file_hash)
+                self.md5_edit.setText(md5)
+                self.bits_per_sample_edit.setText(str(bits_per_sample))
+                self.sample_rate_edit.setText(str(sample_rate))
+                self.bit_rate_edit.setText(str(bitrate))
+                self.length_edit.setText(str(length))
+                self.padding_length_edit.setText(str(padding_length))
+                self.vendor_string_edit.setText(vendor_string)
+
+            except Exception as e:
+                print(f"Error loading FLAC information: {e}")
+        else:
+            try:
+                # 获取多个 FLAC 文件信息
+                file_hashes = []
+                md5s = []
+                bits_per_samples = []
+                sample_rates = []
+                bitrates = []
+                lengths = []
+                padding_lengths = []
+                vendor_strings = []
+
+                for flac_path in self.flac_path:
+                    print(flac_path)
+                    file_hash, md5, bits_per_sample, sample_rate, bitrate, length, padding_length, vendor_string = self.getFLACInfo(
+                        flac_path)
+                    file_hashes.append(file_hash)
+                    md5s.append(md5)
+                    bits_per_samples.append(bits_per_sample)
+                    sample_rates.append(sample_rate)
+                    bitrates.append(bitrate)
+                    lengths.append(length)
+                    padding_lengths.append(padding_length)
+                    vendor_strings.append(vendor_string)
+
+                # 显示信息
+                self.file_hash_edit.setText(self.getUniqueValue(file_hashes))
+                self.md5_edit.setText(self.getUniqueValue(md5s))
+                self.bits_per_sample_edit.setText(self.getUniqueValue(bits_per_samples))
+                self.sample_rate_edit.setText(self.getUniqueValue(sample_rates))
+                self.bit_rate_edit.setText(self.getUniqueValue(bitrates))
+                self.length_edit.setText(self.getUniqueValue(lengths))
+                self.padding_length_edit.setText(self.getUniqueValue(padding_lengths))
+                self.vendor_string_edit.setText(self.getUniqueValue(vendor_strings))
+
+            except Exception as e:
+                print(f"Error loading FLAC information: {e}")
+
+    def getUniqueValue(self, values):
+        # 检查列表中的值是否都相同
+        if all(x == values[0] for x in values):
+            return values[0]
+        else:
+            # 如果值不同，返回 <multivalued> 并使用分号分隔
+            return "<Multivalued> " + "; ".join(set(values))
 
 
 if __name__ == '__main__':
