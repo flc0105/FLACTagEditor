@@ -377,7 +377,13 @@ class FLACTagEditor(QWidget):
                     if len(values) == 1:
                         value_item = QTableWidgetItem(next(iter(values)))
                     else:
-                        sorted_values = sorted(values)  # 对值进行排序
+                        # sorted_values = sorted(values)  # 对值进行排序
+                        # text = "; ".join(sorted_values)
+
+                        # 对值进行排序
+                        sorted_values = sorted(values, key=custom_sort)
+
+                        # 将排序后的值连接成字符串
                         text = "; ".join(sorted_values)
 
                         value_item = QTableWidgetItem(f"<Multivalued> {text}")
@@ -1261,6 +1267,14 @@ class InfoWindow(QDialog):
         else:
             # 如果值不同，返回 <multivalued> 并使用分号分隔
             return "<Multivalued> " + "; ".join(set(values))
+
+
+# 自定义排序函数，将字符串转换为整数进行比较
+def custom_sort(value):
+    if value.isdigit():
+        return int(value)
+    else:
+        return value
 
 
 if __name__ == '__main__':
