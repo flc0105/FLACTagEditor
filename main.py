@@ -1211,6 +1211,24 @@ class InfoWindow(QDialog):
         layout.addWidget(self.vendor_string_label, 7, 0)
         layout.addWidget(self.vendor_string_edit, 7, 1)
 
+        self.min_blocksize_label = QLabel("Minimum Block Size:")
+        self.min_blocksize_edit = QLineEdit()
+        self.min_blocksize_edit.setReadOnly(True)
+        layout.addWidget(self.min_blocksize_label, 8, 0)
+        layout.addWidget(self.min_blocksize_edit, 8, 1)
+
+        self.max_blocksize_label = QLabel("Max Block Size:")
+        self.max_blocksize_edit = QLineEdit()
+        self.max_blocksize_edit.setReadOnly(True)
+        layout.addWidget(self.max_blocksize_label, 9, 0)
+        layout.addWidget(self.max_blocksize_edit, 9, 1)
+
+        self.total_samples_label = QLabel("Total Samples:")
+        self.total_samples_edit = QLineEdit()
+        self.total_samples_edit.setReadOnly(True)
+        layout.addWidget(self.total_samples_label, 10, 0)
+        layout.addWidget(self.total_samples_edit, 10, 1)
+
         # Add OK and Cancel buttons
         ok_button = QPushButton("Save")
         cancel_button = QPushButton("Cancel")
@@ -1221,7 +1239,7 @@ class InfoWindow(QDialog):
 
         ok_button.clicked.connect(self.save_info)
         cancel_button.clicked.connect(self.reject)
-        layout.addLayout(button_layout, 9, 0, 1, 2)
+        layout.addLayout(button_layout, 11, 0, 1, 2)
 
         self.setLayout(layout)
 
@@ -1288,12 +1306,16 @@ class InfoWindow(QDialog):
             # Get vendor string
             vendor_string = flac.tags.vendor
 
+            min_blocksize = str(info.min_blocksize)
+            max_blocksize = str(info.max_blocksize)
+            total_samples = str(info.total_samples)
+
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to read FLAC information: {str(e)}")
-            return '', '', '', '', '', '', '', ''
+            return '', '', '', '', '', '', '', '', '', '', ''
 
         # Return FLAC information
-        return file_hash, md5, bits_per_sample, sample_rate, bitrate, length, padding_length, vendor_string
+        return file_hash, md5, bits_per_sample, sample_rate, bitrate, length, padding_length, vendor_string, min_blocksize, max_blocksize, total_samples
 
     def showFLACInfo(self):
         """
@@ -1308,7 +1330,7 @@ class InfoWindow(QDialog):
         if len(self.flac_path) == 1:
             try:
                 # Get FLAC information
-                file_hash, md5, bits_per_sample, sample_rate, bitrate, length, padding_length, vendor_string = self.getFLACInfo(
+                file_hash, md5, bits_per_sample, sample_rate, bitrate, length, padding_length, vendor_string, min_blocksize, max_blocksize, total_samples = self.getFLACInfo(
                     self.flac_path[0])
 
                 # Update the corresponding QLineEdit widgets
@@ -1320,6 +1342,9 @@ class InfoWindow(QDialog):
                 self.length_edit.setText(str(length))
                 self.padding_length_edit.setText(str(padding_length))
                 self.vendor_string_edit.setText(vendor_string)
+                self.min_blocksize_edit.setText(str(min_blocksize))
+                self.max_blocksize_edit.setText(str(max_blocksize))
+                self.total_samples_edit.setText(str(total_samples))
 
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Error loading FLAC information: {e}")
@@ -1334,10 +1359,13 @@ class InfoWindow(QDialog):
                 lengths = []
                 padding_lengths = []
                 vendor_strings = []
+                min_blocksizes = []
+                max_blocksizes = []
+                total_samples_list = []
 
                 for flac_path in self.flac_path:
                     print(flac_path)
-                    file_hash, md5, bits_per_sample, sample_rate, bitrate, length, padding_length, vendor_string = self.getFLACInfo(
+                    file_hash, md5, bits_per_sample, sample_rate, bitrate, length, padding_length, vendor_string, min_blocksize, max_blocksize, total_samples  = self.getFLACInfo(
                         flac_path)
                     file_hashes.append(file_hash)
                     md5s.append(md5)
@@ -1347,6 +1375,10 @@ class InfoWindow(QDialog):
                     lengths.append(length)
                     padding_lengths.append(padding_length)
                     vendor_strings.append(vendor_string)
+                    min_blocksizes.append(min_blocksize)
+                    max_blocksizes.append(max_blocksize)
+                    total_samples_list.append(total_samples)
+
 
                 # Display information
                 self.file_hash_edit.setText(self.getUniqueValue(file_hashes))
@@ -1357,9 +1389,12 @@ class InfoWindow(QDialog):
                 self.length_edit.setText(self.getUniqueValue(lengths))
                 self.padding_length_edit.setText(self.getUniqueValue(padding_lengths))
                 self.vendor_string_edit.setText(self.getUniqueValue(vendor_strings))
+                self.min_blocksize_edit.setText(self.getUniqueValue(min_blocksizes))
+                self.max_blocksize_edit.setText(self.getUniqueValue(max_blocksizes))
+                self.total_samples_edit.setText(self.getUniqueValue(total_samples_list))
 
             except Exception as e:
-                QMessageBox.critical(self, "Error", f"Error loading FLAC information: {e}")
+                QMessageBox.critical(window, "Error", f"Error loading FLAC information: {e}")
 
     def getUniqueValue(self, values):
         """
