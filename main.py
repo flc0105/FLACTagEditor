@@ -975,7 +975,7 @@ class BlocksWindow(QDialog):
             else:
                 # 如果块代码不是0，弹出询问框确认删除
                 reply = QMessageBox.question(self, "Confirmation",
-                                             f"Are you sure you want to delete {self.block_types.get(block_code, "this")} block?",
+                                             f"Are you sure you want to delete {self.block_types.get(block_code)} block?",
                                              QMessageBox.Yes | QMessageBox.No)
                 if reply == QMessageBox.Yes:
                     # 用户确认删除，删除选中的行
@@ -1001,7 +1001,7 @@ class BlocksWindow(QDialog):
             else:
                 # 如果块代码为其他，弹出消息框提示该块代码
                 QMessageBox.critical(self, "Error",
-                                     f"No support for showing details of {self.block_types.get(block_code, "this")} block.")
+                                     f"No support for showing details of {self.block_types.get(block_code)} block.")
 
     def saveBlocks(self):
 
@@ -1033,7 +1033,6 @@ class BlocksWindow(QDialog):
 
         # 获取新的块代码列表
         new_block_codes = [block.code for block in FLAC(self.flac_path[0]).metadata_blocks]
-
 
         if new_block_codes[-1] != 1:
             QMessageBox.warning(self, "警告",
