@@ -111,7 +111,7 @@ class DropList(QListWidget):
         # Enable accepting drops.
         self.setAcceptDrops(True)
 
-        # 支持多选
+        # Enable multiple selection.
         self.setSelectionMode(QAbstractItemView.ExtendedSelection)
 
     def dragEnterEvent(self, event):
@@ -160,15 +160,6 @@ class FLACTagEditor(QWidget):
         super().__init__()
         self.initUI()
 
-        # 如果以命令行执行并附带文件路径参数，则将文件添加到列表中
-        if len(sys.argv) > 1:
-            file_paths = sys.argv[1:]
-            for file_path in file_paths:
-                if self.isFLAC(file_path):
-                    self.list_widget.addItem(file_path)
-                else:
-                    print(f"{file_path} is not a FLAC file. Skipping.")
-
     def initUI(self):
 
         # Set the window title.
@@ -181,11 +172,12 @@ class FLACTagEditor(QWidget):
         self.center()
 
         # Create a button for importing FLAC files.
-        self.import_button = QPushButton('Import FLAC File', self)
+        self.import_button = QPushButton('Import FLAC Files', self)
         self.import_button.clicked.connect(self.importFLAC)
 
-        self.blocks_button = QPushButton("Show Blocks")
-        self.blocks_button.clicked.connect(self.show_blocks_window)
+        # Create a button for showing metadata blocks.
+        self.show_blocks_button = QPushButton("Show Metadata Blocks", self)
+        self.show_blocks_button.clicked.connect(self.show_blocks_window)
 
         # Create a button for deleting selected files.
         self.delete_button = QPushButton('Delete', self)
@@ -198,7 +190,7 @@ class FLACTagEditor(QWidget):
         # Create a horizontal layout for buttons.
         top_buttons_layout = QHBoxLayout()
         top_buttons_layout.addWidget(self.import_button)
-        top_buttons_layout.addWidget(self.blocks_button)
+        top_buttons_layout.addWidget(self.show_blocks_button)
         top_buttons_layout.addWidget(self.delete_button)
         top_buttons_layout.addWidget(self.clear_button)
 
@@ -208,6 +200,7 @@ class FLACTagEditor(QWidget):
         self.list_widget.setAcceptDrops(True)
         # Set the fixed height of the list widget.
         self.list_widget.setFixedHeight(150)
+        self.list_widget.itemSelectionChanged.connect(self.showTags)
 
         # Create a table widget for drag and drop rows.
         self.table = TableWidgetDragRows(self)
@@ -236,14 +229,13 @@ class FLACTagEditor(QWidget):
 
         # Create a checkbox for padding.
         self.use_padding_checkbox = QCheckBox('Use New Padding', self)
+        self.use_padding_checkbox.stateChanged.connect(self.updatePaddingLineEditState)
         # Create a line edit for entering padding value.
         self.padding_lineedit = QLineEdit(self)
         # Set placeholder text for the line edit.
         self.padding_lineedit.setPlaceholderText("Enter padding value")
         # Initially disable the line edit.
         self.padding_lineedit.setEnabled(False)
-
-        self.use_padding_checkbox.stateChanged.connect(self.updatePaddingLineEditState)
 
         # Create a horizontal layout for add and delete buttons.
         buttons_layout_left = QHBoxLayout()
@@ -272,7 +264,15 @@ class FLACTagEditor(QWidget):
         # Set the main layout
         self.setLayout(layout)
 
-        self.list_widget.itemSelectionChanged.connect(self.showTags)
+        # If executed from the command line with file path arguments,
+        # add the files to the list
+        if len(sys.argv) > 1:
+            file_paths = sys.argv[1:]
+            for file_path in file_paths:
+                if self.isFLAC(file_path):
+                    self.list_widget.addItem(file_path)
+                else:
+                    print(f"{file_path} is not a FLAC file. Skipping.")
 
     def center(self):
         """Center the window on the screen."""
@@ -282,20 +282,28 @@ class FLACTagEditor(QWidget):
         self.move(qr.topLeft())
 
     def show_blocks_window(self):
+        """
+        Show the BlocksWindow dialog with the selected FLAC files.
+
+        This method is triggered when the user clicks on a button to show the BlocksWindow dialog.
+        It gathers the selected FLAC file paths from the list widget and passes them to the BlocksWindow dialog.
+
+        """
+        # Get the selected items from the list widget
         selected_items = self.list_widget.selectedItems()
         if selected_items:
-            # filepath = selected_items[0].text()
-
-            # 创建一个列表来存储选中项目的文本
+            # Create a list to store the text of selected items
             selected_paths = []
 
-            # 将选中项目的文本添加到列表中
+            # Add the text of selected items to the list
             for item in selected_items:
                 selected_paths.append(item.text())
 
+            # Create and execute a BlocksWindow with the selected paths
             cover_window = BlocksWindow(selected_paths)
             cover_window.exec_()
         else:
+            # Show a warning if no FLAC file is selected
             QMessageBox.warning(self, "Warning", "Please select a FLAC file first.")
 
     def importFLAC(self):
@@ -324,11 +332,18 @@ class FLACTagEditor(QWidget):
         self.list_widget.clear()
 
     def showTags(self):
-        """Show tags of the selected FLAC file."""
+        """
+        Show tags of the selected FLAC files.
+
+        If a single file is selected, this method reads the tags of that file and populates the table with tag information.
+        If multiple files are selected, it checks if they have the same tag fields and orders. If they do, it populates the table
+        with tag values. If not, it displays an error message.
+
+        """
         selected_items = self.list_widget.selectedItems()
         if selected_items:
 
-            # 如果选中单个文件
+            # If a single file is selected
             if len(selected_items) == 1:
                 filepath = selected_items[0].text()
                 try:
@@ -337,36 +352,35 @@ class FLACTagEditor(QWidget):
                 except Exception as e:
                     QMessageBox.critical(self, "Error", f"Failed to read tags from {filepath}: {str(e)}")
                     self.table.setRowCount(0)
-            # 如果选中多个文件
+            # If multiple files are selected
             else:
-                # 用于存储各个文件的标签字段及其顺序的列表
+                # List to store tag fields and their orders for each selected file
                 tag_fields = []
 
-                # 遍历选中的文件，获取每个文件的标签字段及其顺序
+                # Iterate through selected files to get tag fields and orders for each file
                 for item in selected_items:
                     filepath = item.text()
                     flac = FLAC(filepath)
                     tag_fields.append([key for key, _ in flac.tags])
 
-                # 检查标签字段列表是否完全相同（包括顺序）
+                # Check if tag fields lists are identical (including order)
                 is_same_tags = all(tag_fields[0] == tag_list for tag_list in tag_fields)
 
                 if not is_same_tags:
                     self.table.setRowCount(0)
                     QMessageBox.critical(self, "Error", "Selected files have different tag fields or orders.")
-                    # self.list_widget.clearSelection()
                     return
 
-                # 清空表格并设置行数
+                # Clear the table and set the row count
                 self.table.setRowCount(len(tag_fields[0]))
 
-                # 填充表格
+                # Populate the table
                 for row, tag in enumerate(tag_fields[0]):
-                    # 设置标签名称
+                    # Set the tag name
                     field_item = QTableWidgetItem(tag)
                     self.table.setItem(row, 0, field_item)
 
-                    # 获取所有文件中相同标签的值
+                    # Get values for the same tag across all selected files
                     values = set()
                     for item in selected_items:
                         filepath = item.text()
@@ -377,23 +391,18 @@ class FLACTagEditor(QWidget):
                     if len(values) == 1:
                         value_item = QTableWidgetItem(next(iter(values)))
                     else:
-                        # sorted_values = sorted(values)  # 对值进行排序
-                        # text = "; ".join(sorted_values)
-
-                        # 对值进行排序
+                        # Sort the values
                         sorted_values = sorted(values, key=custom_sort)
 
-                        # 将排序后的值连接成字符串
+                        # Concatenate sorted values into a string
                         text = "; ".join(sorted_values)
-
                         value_item = QTableWidgetItem(f"<Multivalued> {text}")
                         self.table.setItem(row, 1, value_item)
 
-                        value_item.setForeground(QBrush(QColor(128, 128, 128)))  # 设置文本颜色为灰色
+                        # Set text color to gray
+                        value_item.setForeground(QBrush(QColor(128, 128, 128)))
 
                     self.table.setItem(row, 1, value_item)
-
-
         else:
             self.table.setRowCount(0)
 
@@ -617,11 +626,50 @@ def bits_per_second_to_kbps(bits_per_second):
     return kbps
 
 
+def format_size(size_bytes):
+    """
+    Convert bytes to a human-readable format.
+
+    Args:
+        size_bytes (int): The size in bytes.
+
+    Returns:
+        str: A string representing the size in a human-readable format.
+    """
+    if size_bytes == 0:
+        return "0 B"
+    # Define units and their corresponding byte sizes
+    units = ["B", "KB", "MB", "GB", "TB"]
+    unit_index = 0
+    # Increase gradually starting from byte unit
+    while size_bytes >= 1024 and unit_index < len(units) - 1:
+        size_bytes /= 1024
+        unit_index += 1
+    # Format the output result, keeping two decimal places
+    return "{:.2f} {}".format(size_bytes, units[unit_index])
+
+
+def custom_sort(value):
+    """
+    Custom sorting function that converts strings to integers for comparison.
+
+    Args:
+        value (str): The value to be sorted.
+
+    Returns:
+        int or str: The converted integer value if the input can be converted to an integer, otherwise the original string.
+    """
+    if value.isdigit():
+        return int(value)
+    else:
+        return value
+
+
 class CoverWindow(QDialog):
     def __init__(self, flac_path):
         super().__init__()
 
-        self.resize(400, 400)  # 设置窗口的初始大小
+        self.resize(400, 400)  # Set the initial size of the window
         self.flac_path = flac_path
         self.setWindowTitle("Set Cover")
         self.cover_label = QLabel()
@@ -639,7 +687,6 @@ class CoverWindow(QDialog):
         self.save_button = QPushButton("Save")
         self.cancel_button = QPushButton("Cancel")
 
-        # 创建按钮布局
         button_layout = QHBoxLayout()
         button_layout.addWidget(self.save_button)
         button_layout.addWidget(self.cancel_button)
@@ -663,42 +710,54 @@ class CoverWindow(QDialog):
         self.save_button.clicked.connect(self.saveTags)
         self.cancel_button.clicked.connect(self.close)
 
-        # self.cover_label.mouseDoubleClickEvent = self.chooseImage
-        # 创建右键菜单
+        self.cover_label.mouseDoubleClickEvent = self.chooseImageDoubleClick
+
+        # Create a context menu
         self.context_menu = QMenu(self)
         self.import_action = QAction("Import", self)
         self.export_action = QAction("Export", self)
 
-        # 将动作添加到右键菜单
+        # Add actions to the context menu
         self.context_menu.addAction(self.import_action)
         self.context_menu.addAction(self.export_action)
+
+        # Connect actions to their respective slots
         self.import_action.triggered.connect(self.chooseImage)
         self.export_action.triggered.connect(self.exportCover)
 
-        # 在图片组件上安装事件过滤器
+        # Install event filter on the image component
         self.cover_label.installEventFilter(self)
 
     def eventFilter(self, source, event):
-        """事件过滤器函数，捕获图片组件的右键点击事件，并显示右键菜单。"""
+        """Event filter function to capture right-click events on the image component and display the context menu."""
         if source is self.cover_label and event.type() == QEvent.ContextMenu:
-            # 显示右键菜单
+            # Display the context menu
             self.context_menu.exec_(event.globalPos())
             return True
         return super().eventFilter(source, event)
 
     def exportCover(self):
-        """导出封面图片到文件."""
+        """Export the cover image to a file."""
         if self.picdata is None:
-            QMessageBox.information(self, "Error", "No cover to save.")
+            QMessageBox.information(self, "Error", "No cover image to save.")
             return
         file_path, _ = QFileDialog.getSaveFileName(self, "Save Cover Image", "cover.jpg", "JPEG Files (*.jpg)")
         if file_path:
-            # 将图片数据保存到文件
+            # Save the image data to a file
             with open(file_path, 'wb') as f:
                 f.write(self.picdata)
             QMessageBox.information(self, "Success", "Cover saved successfully.")
 
     def checkCoverConsistency(self, flac_paths):
+        """
+        Check the consistency of cover images across multiple FLAC files.
+
+        Args:
+            flac_paths (list of str): List of paths to the FLAC files.
+
+        Returns:
+            bool: True if all cover images are consistent, False otherwise.
+        """
         first_pic_data = None
         for flac_path in flac_paths:
             try:
@@ -709,25 +768,30 @@ class CoverWindow(QDialog):
                         if first_pic_data is None:
                             first_pic_data = p.data
                         elif first_pic_data != p.data:
-                            # QMessageBox.warning(self, "Warning", "Cover images are not consistent among FLAC files.")
                             return False
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Error loading cover image: {e}")
                 return False
         return True
 
-    def showCoverImage(self, flac_path):
-        if not flac_path:
+    def showCoverImage(self, flac_paths):
+        """
+        Show the cover image for the given FLAC file(s).
+
+        Args:
+            flac_paths (list of str): List of paths to the FLAC file(s).
+        """
+        if not flac_paths:
             return
         try:
-
-            if len(flac_path) > 1:  # 只有一张图片就不需要判断了
-                if not self.checkCoverConsistency(flac_path):
+            # Check consistency of cover images if there are multiple files
+            if len(flac_paths) > 1:
+                if not self.checkCoverConsistency(flac_paths):
                     self.cover_label.setFixedHeight(200)
                     self.cover_label.setText("Multiple images")
                     return
 
-            audio = FLAC(flac_path[0])
+            audio = FLAC(flac_paths[0])
             pictures = audio.pictures
             for p in pictures:
                 if p.type == 3:
@@ -735,7 +799,6 @@ class CoverWindow(QDialog):
                     img = QImage()
                     img.loadFromData(p.data)
                     img_scaled = img.scaled(200, 200, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-                    # 打开设置好的图片
                     pixmap = QPixmap(img_scaled)
                     self.cover_label.setPixmap(pixmap)
 
@@ -756,13 +819,16 @@ class CoverWindow(QDialog):
             return
 
     def saveTags(self):
+        """
+        Save tags and cover image for the FLAC file(s).
+        """
         if not self.flac_path:
             return
         if not self.picdata:
             return
 
         if len(self.flac_path) > 1:
-
+            # For multiple files, update cover image and save tags for each file
             picture = Picture()
             picture.type = 3
             picture.mime = 'image/jpeg'
@@ -792,6 +858,7 @@ class CoverWindow(QDialog):
 
             QMessageBox.information(self, "Success", "All tags saved successfully.")
         else:
+            # For a single file, update cover image and save tags
             audio = FLAC(self.flac_path[0])
             picture = Picture()
             picture.type = 3
@@ -803,7 +870,7 @@ class CoverWindow(QDialog):
                 width_text = self.width_edit.text()
                 depth_text = self.depth_edit.text()
 
-                # 如果文本框中的文本为空，则将相应的值设置为None
+                # Convert text to integers or None if text is empty
                 height = int(height_text) if height_text else None
                 width = int(width_text) if width_text else None
                 depth = int(depth_text) if depth_text else None
@@ -822,47 +889,41 @@ class CoverWindow(QDialog):
             audio.save()
             QMessageBox.information(self, "Success", "Tags saved successfully.")
 
-    def chooseImage(self):  # event:
-        """Handle double-click event on the cover image."""
-        # if event.button() == Qt.LeftButton:
-        if True:
-            # 弹出文件选择对话框
-            file_path, _ = QFileDialog.getOpenFileName(self, "Select Image", "", "Image Files (*.jpg)")
-            if file_path:
-                # 读取新图片数据
-                with open(file_path, "rb") as file:
-                    image_data = file.read()
-                # 将新图片显示在图片组件中
-                self.picdata = image_data
+    def chooseImageDoubleClick(self, event):
+        """
+        Event handler for double-click event on the image label.
+        Opens the chooseImage method upon left mouse button double-click.
+        """
+        if event.button() == Qt.LeftButton:
+            self.chooseImage()
 
-                img = QImage()
-                img.loadFromData(image_data)
-                img_scaled = img.scaled(200, 200, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-                pixmap = QPixmap(img_scaled)
-                self.cover_label.setPixmap(pixmap)
+    def chooseImage(self):
+        """
+        Opens a file dialog to select an image file, then displays the chosen image.
+        """
+        # Open a file dialog to select an image file
+        file_path, _ = QFileDialog.getOpenFileName(self, "Select Image", "", "Image Files (*.jpg)")
+        if file_path:
+            # Read the image data from the selected file
+            with open(file_path, "rb") as file:
+                image_data = file.read()
 
-                pic_len = len(self.picdata)
-                self.file_size_label.setText(f"File Size: {format_size(pic_len)} ({pic_len})")
-                self.resolution_label.setText(f"Resolution: {img.size().width()}x{img.size().height()}")
+            # Display the selected image in the image label
+            self.picdata = image_data
 
-                self.width_edit.setText(str(img.size().width()))
-                self.height_edit.setText(str(img.size().height()))
-                self.depth_edit.setText(str(img.depth()))
+            img = QImage()
+            img.loadFromData(image_data)
+            img_scaled = img.scaled(200, 200, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            pixmap = QPixmap(img_scaled)
+            self.cover_label.setPixmap(pixmap)
 
+            pic_len = len(self.picdata)
+            self.file_size_label.setText(f"File Size: {format_size(pic_len)} ({pic_len})")
+            self.resolution_label.setText(f"Resolution: {img.size().width()}x{img.size().height()}")
 
-def format_size(size_bytes):
-    """Convert bytes to a human-readable format."""
-    if size_bytes == 0:
-        return "0 B"
-    # 定义单位和对应的字节大小
-    units = ["B", "KB", "MB", "GB", "TB"]
-    unit_index = 0
-    # 从字节单位开始逐级增加
-    while size_bytes >= 1024 and unit_index < len(units) - 1:
-        size_bytes /= 1024
-        unit_index += 1
-    # 格式化输出结果，保留两位小数
-    return "{:.2f} {}".format(size_bytes, units[unit_index])
+            self.width_edit.setText(str(img.size().width()))
+            self.height_edit.setText(str(img.size().height()))
+            self.depth_edit.setText(str(img.depth()))
 
 
 class BlocksWindow(QDialog):
@@ -876,9 +937,6 @@ class BlocksWindow(QDialog):
         self.blocks_table.setHorizontalHeaderLabels(["Block Code", "Block Type"])
         self.blocks_table.setColumnWidth(0, 150)
         self.blocks_table.setColumnWidth(1, 300)
-
-        # 设置表格选择模式为单选
-        # self.blocks_table.setSelectionMode(QAbstractItemView.SingleSelection)
 
         layout = QVBoxLayout()
         layout.addWidget(self.blocks_table)
@@ -912,18 +970,24 @@ class BlocksWindow(QDialog):
 
         self.loadMetadataBlocks()
 
-        # 按钮绑定事件
         self.delete_button.clicked.connect(self.deleteBlock)
         self.details_button.clicked.connect(self.showBlockDetails)
         self.save_button.clicked.connect(self.saveBlocks)
         self.close_button.clicked.connect(self.close)
 
         self.blocks_table.setEditTriggers(QTableWidget.NoEditTriggers)
-
-        # 双击行触发显示详细信息的槽函数
         self.blocks_table.cellDoubleClicked.connect(self.showBlockDetails)
 
     def loadMetadataBlocks(self):
+        """
+        Load metadata blocks from FLAC files.
+
+        This method ensures the consistency of metadata block counts and block codes among multiple FLAC files.
+
+        Raises:
+            QMessageBox.critical: If an error occurs during loading metadata blocks or if metadata block counts or
+                block codes are inconsistent among FLAC files.
+        """
         if not self.flac_path:
             return
         try:
@@ -932,21 +996,25 @@ class BlocksWindow(QDialog):
             block_codes = []
 
             if len(self.flac_path) > 1:
-                # 遍历每个 FLAC 文件路径
+                # Iterate over each FLAC file path
                 for path in self.flac_path:
                     flac = FLAC(path)
 
-                    blocks_count = len(flac.metadata_blocks)  # 获取当前 FLAC 文件的元数据块数量
-                    block_counts.append(blocks_count)  # 将元数据块数量添加到列表中
-                    block_code = [block.code for block in flac.metadata_blocks]  # 获取当前 FLAC 文件的元数据块代码列表
-                    block_codes.append(block_code)  # 将元数据块代码列表添加到列表中
+                    # Get the number of metadata blocks in the current FLAC file
+                    blocks_count = len(flac.metadata_blocks)
+                    # Add the number of metadata blocks to the list
+                    block_counts.append(blocks_count)
+                    # Get the metadata block code list
+                    block_code = [block.code for block in flac.metadata_blocks]
+                    # Add the metadata block code list to the list
+                    block_codes.append(block_code)
 
-                # 检查元数据块数量列表中的所有值是否都相同
+                # Check if all values in the metadata block count list are the same
                 if len(set(block_counts)) != 1:
                     QMessageBox.critical(window, "Error", "Metadata blocks count is not consistent among FLAC files.")
                     return
 
-                # 检查元数据块代码列表中的所有值是否都相同
+                # Check if all values in the metadata block code list are the same
                 if len(set(map(tuple, block_codes))) != 1:
                     QMessageBox.critical(window, "Error",
                                          "Metadata block codes combination is not consistent among FLAC files.")
@@ -956,8 +1024,6 @@ class BlocksWindow(QDialog):
 
             for i, block in enumerate(flac.metadata_blocks):
                 block_type = self.block_types.get(block.code, "Unknown")
-                # block_data = str(block)
-
                 self.blocks_table.insertRow(self.blocks_table.rowCount())
                 self.blocks_table.setItem(i, 0, QTableWidgetItem(str(block.code)))
                 self.blocks_table.setItem(i, 1, QTableWidgetItem(block_type))
@@ -966,6 +1032,17 @@ class BlocksWindow(QDialog):
             QMessageBox.critical(self, "Error", f"Error loading metadata blocks: {e}")
 
     def deleteBlock(self):
+        """
+        Delete selected metadata blocks.
+
+        This method allows the user to delete selected metadata blocks from the table. It prevents the deletion of
+        STREAMINFO blocks.
+
+        Raises:
+            QMessageBox.critical: If no block is selected.
+            QMessageBox.warning: If the selected block is STREAMINFO, which cannot be deleted.
+            QMessageBox.question: Asks for confirmation before deleting a block.
+        """
 
         selected_rows = self.blocks_table.selectionModel().selectedRows()
 
@@ -976,75 +1053,92 @@ class BlocksWindow(QDialog):
             block_code_item = self.blocks_table.item(row.row(), 0)  # 获取当前行的块代码
             block_code = int(block_code_item.text())
             if block_code == 0:
-                # 如果块代码为0，提示不允许删除
+                # If the block code is 0, prompt that deletion is not allowed
                 QMessageBox.warning(self, "Warning", f"{self.block_types.get(block_code)} block cannot be deleted.")
             else:
-                # 如果块代码不是0，弹出询问框确认删除
+                # If the block code is not 0, prompt for confirmation before deletion
                 reply = QMessageBox.question(self, "Confirmation",
                                              f"Are you sure you want to delete {self.block_types.get(block_code)} block?",
                                              QMessageBox.Yes | QMessageBox.No)
                 if reply == QMessageBox.Yes:
-                    # 用户确认删除，删除选中的行
+                    # If the user confirms deletion, remove the selected row
                     self.blocks_table.removeRow(row.row())
 
     def showBlockDetails(self):
+        """
+        Show details of the selected metadata block.
 
+        This method displays detailed information about the selected metadata block when triggered by the user.
+
+        Raises:
+            QMessageBox.critical: If no block is selected or if the block code is not supported.
+        """
         selected_rows = self.blocks_table.selectionModel().selectedRows()
 
         if not selected_rows:
             QMessageBox.critical(self, "Error", "Please select a block.")
 
         for row in selected_rows:
-            block_code_item = self.blocks_table.item(row.row(), 0)  # 获取当前行的块代码
+            # Get the block code of the current row
+            block_code_item = self.blocks_table.item(row.row(), 0)
             block_code = int(block_code_item.text())
             if block_code == 6:
-                # cover_window = CoverWindow(self.flac_path)
                 cover_window = CoverWindow(self.flac_path)
                 cover_window.exec_()
             elif block_code == 0:
                 info_window = InfoWindow(self.flac_path)
                 info_window.exec_()
             else:
-                # 如果块代码为其他，弹出消息框提示该块代码
+                # If the block code is not supported, display an error message
                 QMessageBox.critical(self, "Error",
                                      f"No support for showing details of {self.block_types.get(block_code)} block.")
 
     def saveBlocks(self):
+        """
+        Save metadata blocks based on the reordered block codes.
 
-        # 保存块信息的事件处理程序
+        This method saves the reordered metadata blocks based on the new block codes obtained from the table.
+
+        Raises:
+            QMessageBox.warning: If the last block is not PADDING, indicating potential issues with the modification.
+            QMessageBox.information: Upon successful modification.
+        """
         new_block_codes = []
 
-        # 遍历表格的每一行
+        # Iterate over each row in the table
         for row in range(self.blocks_table.rowCount()):
-            # 获取当前行的第一列，即块代码
+            # Get the block code of the current row, which is the first column
             block_code_item = self.blocks_table.item(row, 0)
             if block_code_item:
-                # 如果获取到了块代码，将其转换为整数并添加到列表中
+                # If a block code is obtained, convert it to an integer and add it to the list
                 old_block_codes = int(block_code_item.text())
                 new_block_codes.append(old_block_codes)
 
-        # flac = FLAC(self.flac_path[0])
-
+        # Iterate over each FLAC file path
         for path in self.flac_path:
             flac = FLAC(path)
+            # Create a backup of the metadata blocks
             bak = flac.metadata_blocks[:]
-            print(bak)
+            # Clear the original metadata blocks
             flac.metadata_blocks.clear()
-            print(bak)
+
+            # Reinsert metadata blocks based on the new order
             for new_index, block_code_value in enumerate(new_block_codes):
+                # Find the metadata block corresponding to the current block code value in the backup
                 elm = next((block for block in bak if block.code == block_code_value), None)
                 flac.metadata_blocks.insert(new_index, elm)
-
+            # Save the modified FLAC file
             flac.save()
 
-        # 获取新的块代码列表
+        # Get the new block codes list
         new_block_codes = [block.code for block in FLAC(self.flac_path[0]).metadata_blocks]
 
+        # Check if the last block is PADDING
         if new_block_codes[-1] != 1:
-            QMessageBox.warning(self, "警告",
-                                "修改完成，对PADDING作出的修改可能不会生效，PADDING必须在最后一位")
+            QMessageBox.warning(self, "Warning",
+                                "Modification completed, changes to PADDING may not take effect, PADDING must be at the last position.")
         else:
-            QMessageBox.information(self, "成功", "修改完成")
+            QMessageBox.information(self, "Success", "Modification completed")
 
 
 class InfoWindow(QDialog):
@@ -1057,13 +1151,11 @@ class InfoWindow(QDialog):
             return
 
         if len(self.flac_path) == 1:
-            # 如果只有一个文件，窗口标题为该文件名
             self.setWindowTitle(f"{os.path.basename(self.flac_path[0])}")
         else:
-            # 如果有多个文件，窗口标题为第一个文件名加上 “等 {文件数量} 个文件”
             first_file = os.path.basename(self.flac_path[0])
             remaining_files_count = len(self.flac_path) - 1
-            self.setWindowTitle(f"{first_file} 等 {remaining_files_count} 个文件")
+            self.setWindowTitle(f"{first_file} and {remaining_files_count} more files")
 
         self.resize(500, 300)
 
@@ -1071,7 +1163,6 @@ class InfoWindow(QDialog):
         layout = QGridLayout()
 
         # Add QLabel and QLineEdit for each property
-
         self.file_hash_label = QLabel("File Hash:")
         self.file_hash_edit = QLineEdit()
         self.file_hash_edit.setReadOnly(True)  # Read-only
@@ -1086,31 +1177,31 @@ class InfoWindow(QDialog):
 
         self.bits_per_sample_label = QLabel("Bits Per Sample:")
         self.bits_per_sample_edit = QLineEdit()
-        self.bits_per_sample_edit.setReadOnly(True)  # Read-only
+        self.bits_per_sample_edit.setReadOnly(True)
         layout.addWidget(self.bits_per_sample_label, 2, 0)
         layout.addWidget(self.bits_per_sample_edit, 2, 1)
 
         self.sample_rate_label = QLabel("Sample Rate:")
         self.sample_rate_edit = QLineEdit()
-        self.sample_rate_edit.setReadOnly(True)  # Read-only
+        self.sample_rate_edit.setReadOnly(True)
         layout.addWidget(self.sample_rate_label, 3, 0)
         layout.addWidget(self.sample_rate_edit, 3, 1)
 
         self.bit_rate_label = QLabel("Bit Rate:")
         self.bit_rate_edit = QLineEdit()
-        self.bit_rate_edit.setReadOnly(True)  # Read-only
+        self.bit_rate_edit.setReadOnly(True)
         layout.addWidget(self.bit_rate_label, 4, 0)
         layout.addWidget(self.bit_rate_edit, 4, 1)
 
         self.length_label = QLabel("Length:")
         self.length_edit = QLineEdit()
-        self.length_edit.setReadOnly(True)  # Read-only
+        self.length_edit.setReadOnly(True)
         layout.addWidget(self.length_label, 5, 0)
         layout.addWidget(self.length_edit, 5, 1)
 
         self.padding_length_label = QLabel("Padding Length:")
         self.padding_length_edit = QLineEdit()
-        self.padding_length_edit.setReadOnly(True)  # Read-only
+        self.padding_length_edit.setReadOnly(True)
         layout.addWidget(self.padding_length_label, 6, 0)
         layout.addWidget(self.padding_length_edit, 6, 1)
 
@@ -1123,7 +1214,7 @@ class InfoWindow(QDialog):
         # Add OK and Cancel buttons
         ok_button = QPushButton("Save")
         cancel_button = QPushButton("Cancel")
-        # 创建按钮布局
+
         button_layout = QHBoxLayout()
         button_layout.addWidget(ok_button)
         button_layout.addWidget(cancel_button)
@@ -1134,17 +1225,21 @@ class InfoWindow(QDialog):
 
         self.setLayout(layout)
 
-        # Get FLAC file information
         self.showFLACInfo()
 
     def save_info(self):
+        """
+        Save vendor and MD5 information to FLAC files.
+
+        If the vendor or MD5 text fields start with "<Multivalued>", the values will be preserved from the FLAC file.
+        """
         for path in self.flac_path:
             audio = FLAC(path)
 
             vendor = self.vendor_string_edit.text()
             md5 = self.md5_edit.text()
 
-            # 检查是否使用文本框的值
+            # Check if the values from the text fields should be used
             if vendor.startswith("<Multivalued>"):
                 vendor = audio.tags.vendor
 
@@ -1153,13 +1248,13 @@ class InfoWindow(QDialog):
                 if hex_string:
                     md5 = hex_string
 
-            # 转换十六进制字符串为十进制值
+            # Convert hexadecimal string to decimal value
             decimal_value = int(md5, 16) if md5 else ""
             audio.tags.vendor = vendor
             audio.info.md5_signature = decimal_value
 
             audio.save()
-        QMessageBox.information(self, "SAVED", "Ok")
+        QMessageBox.information(self, "Success", "Modification completed")
 
     def getFLACInfo(self, filepath):
         """Get information about the FLAC file.
@@ -1201,6 +1296,12 @@ class InfoWindow(QDialog):
         return file_hash, md5, bits_per_sample, sample_rate, bitrate, length, padding_length, vendor_string
 
     def showFLACInfo(self):
+        """
+        Display FLAC file information in the corresponding QLineEdit widgets.
+
+        If there is only one FLAC file selected, display its information.
+        If multiple FLAC files are selected, display unique values across all files.
+        """
         if not self.flac_path:
             return
 
@@ -1221,10 +1322,10 @@ class InfoWindow(QDialog):
                 self.vendor_string_edit.setText(vendor_string)
 
             except Exception as e:
-                print(f"Error loading FLAC information: {e}")
+                QMessageBox.critical(self, "Error", f"Error loading FLAC information: {e}")
         else:
             try:
-                # 获取多个 FLAC 文件信息
+                # Get information for multiple FLAC files
                 file_hashes = []
                 md5s = []
                 bits_per_samples = []
@@ -1247,7 +1348,7 @@ class InfoWindow(QDialog):
                     padding_lengths.append(padding_length)
                     vendor_strings.append(vendor_string)
 
-                # 显示信息
+                # Display information
                 self.file_hash_edit.setText(self.getUniqueValue(file_hashes))
                 self.md5_edit.setText(self.getUniqueValue(md5s))
                 self.bits_per_sample_edit.setText(self.getUniqueValue(bits_per_samples))
@@ -1258,23 +1359,24 @@ class InfoWindow(QDialog):
                 self.vendor_string_edit.setText(self.getUniqueValue(vendor_strings))
 
             except Exception as e:
-                print(f"Error loading FLAC information: {e}")
+                QMessageBox.critical(self, "Error", f"Error loading FLAC information: {e}")
 
     def getUniqueValue(self, values):
-        # 检查列表中的值是否都相同
+        """
+        Get a unique value from a list of values.
+
+        Args:
+            values (list): A list of values.
+
+        Returns:
+            str: A unique value from the list or "<Multivalued>" followed by semicolon-separated values if values are not identical.
+        """
+        # Check if all values in the list are the same
         if all(x == values[0] for x in values):
             return values[0]
         else:
-            # 如果值不同，返回 <multivalued> 并使用分号分隔
+            # If values are different, return "<Multivalued>" followed by semicolon-separated values
             return "<Multivalued> " + "; ".join(set(values))
-
-
-# 自定义排序函数，将字符串转换为整数进行比较
-def custom_sort(value):
-    if value.isdigit():
-        return int(value)
-    else:
-        return value
 
 
 if __name__ == '__main__':
