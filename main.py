@@ -144,15 +144,52 @@ class DropList(QListWidget):
             for url in md.urls():
                 # Get the local file path from the URL.
                 filepath = url.toLocalFile()
+                # Check if the file path corresponds to a directory.
+                if os.path.isdir(filepath):
+                    # Recursively add all FLAC file paths from the directory to the list.
+                    self.addFLACFilesFromDirectory(filepath)
                 # Check if the file path corresponds to a FLAC file.
-                if self.parent().isFLAC(filepath):
+                elif self.parent().isFLAC(filepath):
                     # Add the file path to the list.
                     self.addItem(filepath)
                 else:
-                    print(f"{filepath} is not a FLAC file. Skipping.")
+                    print(f"{filepath} is not a directory or a FLAC file. Skipping.")
             self.sortItems()
             # Accept the proposed action.
             event.acceptProposedAction()
+
+    def addFLACFilesFromDirectory(self, directory):
+        """Recursively add FLAC file paths from the specified directory and its subdirectories."""
+        # Iterate through all files and directories in the specified directory.
+        for root, _, files in os.walk(directory):
+            # Iterate through the files.
+            for file in files:
+                # Check if the file is a FLAC file.
+                if self.parent().isFLAC(file):
+                    # Construct the full file path.
+                    filepath = os.path.join(root, file)
+                    # Add the file path to the list.
+                    self.addItem(filepath)
+
+    # def dropEvent(self, event):
+    #     """Handle drop event."""
+    #     # Get the mime data from the event.
+    #     md = event.mimeData()
+    #     # Check if the mime data contains URLs.
+    #     if md.hasUrls():
+    #         # Iterate through the URLs.
+    #         for url in md.urls():
+    #             # Get the local file path from the URL.
+    #             filepath = url.toLocalFile()
+    #             # Check if the file path corresponds to a FLAC file.
+    #             if self.parent().isFLAC(filepath):
+    #                 # Add the file path to the list.
+    #                 self.addItem(filepath)
+    #             else:
+    #                 print(f"{filepath} is not a FLAC file. Skipping.")
+    #         self.sortItems()
+    #         # Accept the proposed action.
+    #         event.acceptProposedAction()
 
 
 class FLACTagEditor(QWidget):
@@ -396,7 +433,7 @@ class FLACTagEditor(QWidget):
 
                         # Concatenate sorted values into a string
                         text = "; ".join(sorted_values)
-                        value_item = QTableWidgetItem(f"<Multivalued> {text}")
+                        value_item = QTableWidgetItem(f"≪Multivalued≫ {text}")
                         self.table.setItem(row, 1, value_item)
 
                         # Set text color to gray
@@ -544,7 +581,7 @@ class FLACTagEditor(QWidget):
 
                     # Set metadata tags
                     for k, v in metadata_dict.items():
-                        if v.startswith("<Multivalued> "):
+                        if v.startswith("≪Multivalued≫ "):
                             # Restore original value
                             if filepath in original_tag_values and k in original_tag_values[filepath]:
                                 flac[k] = original_tag_values[filepath][k]
@@ -1249,7 +1286,7 @@ class InfoWindow(QDialog):
         """
         Save vendor and MD5 information to FLAC files.
 
-        If the vendor or MD5 text fields start with "<Multivalued>", the values will be preserved from the FLAC file.
+        If the vendor or MD5 text fields start with "≪Multivalued≫", the values will be preserved from the FLAC file.
         """
         for path in self.flac_path:
             audio = FLAC(path)
@@ -1258,10 +1295,10 @@ class InfoWindow(QDialog):
             md5 = self.md5_edit.text()
 
             # Check if the values from the text fields should be used
-            if vendor.startswith("<Multivalued>"):
+            if vendor.startswith("≪Multivalued≫"):
                 vendor = audio.tags.vendor
 
-            if md5.startswith("<Multivalued>"):
+            if md5.startswith("≪Multivalued≫"):
                 hex_string = audio.info.md5_signature
                 if hex_string:
                     md5 = hex_string
@@ -1404,14 +1441,14 @@ class InfoWindow(QDialog):
             values (list): A list of values.
 
         Returns:
-            str: A unique value from the list or "<Multivalued>" followed by semicolon-separated values if values are not identical.
+            str: A unique value from the list or "≪Multivalued≫" followed by semicolon-separated values if values are not identical.
         """
         # Check if all values in the list are the same
         if all(x == values[0] for x in values):
             return values[0]
         else:
-            # If values are different, return "<Multivalued>" followed by semicolon-separated values
-            return "<Multivalued> " + "; ".join(set(values))
+            # If values are different, return "≪Multivalued≫" followed by semicolon-separated values
+            return "≪Multivalued≫ " + "; ".join(set(values))
 
 
 if __name__ == '__main__':
