@@ -961,12 +961,10 @@ class InfoWindow(QDialog):
                 vendor = audio.tags.vendor
 
             if md5.startswith("≪Multivalued≫"):
-                hex_string = audio.info.md5_signature
-                if hex_string:
-                    md5 = hex_string
-
-            # Convert hexadecimal string to decimal value
-            decimal_value = int(md5, 16) if md5 else ""
+                decimal_value = audio.info.md5_signature
+            else:
+                # Convert hexadecimal string to decimal value
+                decimal_value = int(md5, 16) if md5 else ""
             audio.tags.vendor = vendor
             audio.info.md5_signature = decimal_value
 
