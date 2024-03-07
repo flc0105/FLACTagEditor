@@ -2,6 +2,7 @@ import datetime
 import hashlib
 import os
 import sys
+import traceback
 
 from PyQt5 import QtWidgets
 from PyQt5.QtCore import Qt, QEvent
@@ -431,6 +432,7 @@ class FLACTagEditor(QWidget):
                     else:
                         # Sort the values
                         sorted_values = sorted(values, key=custom_sort)
+                        # sorted_values = sorted(values)
 
                         # Concatenate sorted values into a string
                         text = "; ".join(sorted_values)
@@ -1501,7 +1503,23 @@ def custom_sort(value):
         return value
 
 
+def exception_hook(exc_type, exc_value, exc_traceback):
+    """
+    Custom exception hook to handle uncaught exceptions.
+    """
+    # 构建异常消息
+    exception_message = ''.join(traceback.format_exception(exc_type, exc_value, exc_traceback))
+
+    # 显示异常消息框
+    QMessageBox.critical(None, "Exception", exception_message, QMessageBox.StandardButton.Ok)
+    sys.__excepthook__(exc_type, exc_value, exc_traceback)  # 继续执行默认的异常处理
+
+
+
 if __name__ == '__main__':
+    # 设置全局异常处理程序
+    sys.excepthook = exception_hook
+
     app = QApplication(sys.argv)
     window = FLACTagEditor()
     window.show()
