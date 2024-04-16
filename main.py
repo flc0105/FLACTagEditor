@@ -431,8 +431,8 @@ class FLACTagEditor(QWidget):
                         value_item = QTableWidgetItem(next(iter(values)))
                     else:
                         # Sort the values
-                        sorted_values = sorted(values, key=custom_sort)
-                        # sorted_values = sorted(values)
+                        # sorted_values = sorted(values, key=custom_sort)
+                        sorted_values = sorted(values)
 
                         # Concatenate sorted values into a string
                         text = "; ".join(sorted_values)
