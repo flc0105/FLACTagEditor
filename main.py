@@ -1,5 +1,6 @@
 import datetime
 import hashlib
+import json
 import os
 import sys
 import traceback
@@ -604,10 +605,12 @@ class BlocksWindow(QDialog):
         self.setWindowTitle("FLAC Metadata Blocks")
         self.flac_path = flac_path
         self.blocks_table = TableWidgetDragRows()
-        self.blocks_table.setColumnCount(2)
-        self.blocks_table.setHorizontalHeaderLabels(["Block Code", "Block Type"])
-        self.blocks_table.setColumnWidth(0, 150)
-        self.blocks_table.setColumnWidth(1, 300)
+        self.blocks_table.setColumnCount(4)
+        self.blocks_table.setHorizontalHeaderLabels(["Block Code", "Block Type", "Block Data", "Hash"])
+        self.blocks_table.setColumnWidth(0, 100)
+        self.blocks_table.setColumnWidth(1, 150)
+        self.blocks_table.setColumnWidth(2, 500)
+        self.blocks_table.setColumnWidth(3, 200)
 
         layout = QVBoxLayout()
         layout.addWidget(self.blocks_table)
@@ -698,6 +701,12 @@ class BlocksWindow(QDialog):
                 self.blocks_table.insertRow(self.blocks_table.rowCount())
                 self.blocks_table.setItem(i, 0, QTableWidgetItem(str(block.code)))
                 self.blocks_table.setItem(i, 1, QTableWidgetItem(block_type))
+                block_data = str(vars(block) if block.code != 6 else block)
+                self.blocks_table.setItem(i, 2, QTableWidgetItem(block_data))
+
+                block_data_hash = hash_data(block_data)
+                self.blocks_table.setItem(i, 3, QTableWidgetItem(block_data_hash))
+
 
         except Exception as e:
             QMessageBox.critical(window, "Error", f"Error loading metadata blocks: {e}")
@@ -770,9 +779,11 @@ class BlocksWindow(QDialog):
                 info_window = InfoWindow(self.flac_path)
                 info_window.exec_()
             else:
+                block_data_text = self.blocks_table.item(row.row(), 2).text()
+                QMessageBox.information(self, "Block Information", block_data_text)
                 # If the block code is not supported, display an error message
-                QMessageBox.critical(self, "Error",
-                                     f"No support for showing details of {self.block_types.get(block_code)} block.")
+                # QMessageBox.critical(self, "Error",
+                #                      f"No support for showing details of {self.block_types.get(block_code)} block.")
 
     def saveBlocks(self):
         """
@@ -785,15 +796,24 @@ class BlocksWindow(QDialog):
             QMessageBox.information: Upon successful modification.
         """
         new_block_codes = []
+        new_block_data_hash = []
 
         # Iterate over each row in the table
         for row in range(self.blocks_table.rowCount()):
             # Get the block code of the current row, which is the first column
             block_code_item = self.blocks_table.item(row, 0)
+
+            block_data_hash = self.blocks_table.item(row, 3).text()
+
             if block_code_item:
                 # If a block code is obtained, convert it to an integer and add it to the list
                 old_block_codes = int(block_code_item.text())
                 new_block_codes.append(old_block_codes)
+
+                new_block_data_hash.append(block_data_hash)
+
+        print(f"new_block_codes={new_block_codes}")
+        print(f"new_block_data_hash={new_block_data_hash}")
 
         # Iterate over each FLAC file path
         for path in self.flac_path:
@@ -806,7 +826,9 @@ class BlocksWindow(QDialog):
             # Reinsert metadata blocks based on the new order
             for new_index, block_code_value in enumerate(new_block_codes):
                 # Find the metadata block corresponding to the current block code value in the backup
-                elm = next((block for block in bak if block.code == block_code_value), None)
+
+                # 2024-05-27 同时判断block编号和block数据str的hash都相同的情况下才会移动
+                elm = next((block for block in bak if block.code == block_code_value and new_block_data_hash[new_index] == hash_data(str(vars(block) if block.code != 6 else block))), None)
                 flac.metadata_blocks.insert(new_index, elm)
             # Save the modified FLAC file
             flac.save()
@@ -1503,6 +1525,17 @@ def custom_sort(value):
         return value
 
 
+def hash_data(data):
+    # 创建一个 SHA-256 哈希对象
+    sha256 = hashlib.sha256()
+
+    # 更新哈希对象，传入数据（需要是字节类型）
+    sha256.update(data.encode('utf-8'))
+
+    # 返回哈希值的十六进制表示
+    return sha256.hexdigest()
+
+
 def exception_hook(exc_type, exc_value, exc_traceback):
     """
     Custom exception hook to handle uncaught exceptions.
@@ -1513,7 +1546,6 @@ def exception_hook(exc_type, exc_value, exc_traceback):
     # 显示异常消息框
     QMessageBox.critical(None, "Exception", exception_message, QMessageBox.StandardButton.Ok)
     sys.__excepthook__(exc_type, exc_value, exc_traceback)  # 继续执行默认的异常处理
-
 
 
 if __name__ == '__main__':
