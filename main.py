@@ -242,6 +242,9 @@ class FLACTagEditor(QWidget):
         self.delete_button = QPushButton('Delete', self)
         self.delete_button.clicked.connect(self.deleteTableRow)
 
+        self.cover_button = QPushButton('Set Cover', self)
+        self.cover_button.clicked.connect(self.setCover)
+
         # Create a button for saving changes.
         self.save_button = QPushButton('Save', self)
         self.save_button.clicked.connect(self.saveFLAC)
@@ -260,6 +263,7 @@ class FLACTagEditor(QWidget):
         buttons_layout_left = QHBoxLayout()
         buttons_layout_left.addWidget(self.add_button)
         buttons_layout_left.addWidget(self.delete_button)
+        buttons_layout_left.addWidget(self.cover_button)
 
         # Create a horizontal layout for checkbox, line edit, and save button.
         buttons_layout_right = QHBoxLayout()
@@ -310,6 +314,36 @@ class FLACTagEditor(QWidget):
                 else:
                     print(f"{filepath} is not a FLAC file. Skipping.")
         self.list_widget.sortItems()
+
+
+    def setCover(self):
+        selected_items = self.list_widget.selectedItems()
+        if selected_items:
+            # Create a list to store the text of selected items
+            selected_paths = []
+
+            # Add the text of selected items to the list
+            for item in selected_items:
+                selected_paths.append(item.text())
+
+            cover_window = CoverWindow(selected_paths)
+            cover_window.exec_()
+
+            #
+            # # If a single file is selected
+            # if len(selected_items) == 1:
+            #     filepath = selected_items[0].text()
+            #     cover_window = CoverWindow(filepath)
+            #     cover_window.exec_()
+
+            # else:
+            #     QMessageBox.critical(self, "Error", "Batch set cover is not supported.")
+
+        else:
+            QMessageBox.critical(self, "Error", "Please select a FLAC file first.")
+
+
+
 
     def showBlocks(self):
         """
@@ -616,6 +650,7 @@ class BlocksWindow(QDialog):
         layout.addWidget(self.blocks_table)
 
         self.details_button = QPushButton("Details")
+        # self.add_button = QPushButton("Add")
         self.delete_button = QPushButton("Delete")
         self.save_button = QPushButton("Save")
         self.close_button = QPushButton("Close")
@@ -625,6 +660,7 @@ class BlocksWindow(QDialog):
 
         button_layout = QHBoxLayout()
         button_layout.addWidget(self.details_button)
+        # button_layout.addWidget(self.add_button)
         button_layout.addWidget(self.delete_button)
         button_layout.addWidget(self.save_button)
         button_layout.addWidget(self.close_button)
@@ -645,6 +681,7 @@ class BlocksWindow(QDialog):
         self.loadMetadataBlocks()
 
         self.delete_button.clicked.connect(self.deleteBlock)
+        # self.add_button.clicked.connect(self.addBlock)
         self.details_button.clicked.connect(self.showBlockDetails)
         self.save_button.clicked.connect(self.saveBlocks)
         self.close_button.clicked.connect(self.close)
@@ -710,6 +747,12 @@ class BlocksWindow(QDialog):
 
         except Exception as e:
             QMessageBox.critical(window, "Error", f"Error loading metadata blocks: {e}")
+
+
+    # def addBlock(self):
+
+
+
 
     def deleteBlock(self):
         """
@@ -1242,6 +1285,8 @@ class CoverWindow(QDialog):
 
         # Install event filter on the image component
         self.cover_label.installEventFilter(self)
+        # edit 2024.11.21
+        self.picdata = None
 
     def eventFilter(self, source, event):
         """Event filter function to capture right-click events on the image component and display the context menu."""
@@ -1329,6 +1374,10 @@ class CoverWindow(QDialog):
                     return  # Exit after displaying the first cover
             # If no cover found, clear cover label
             self.cover_label.clear()
+            # edit 2024.11.21
+            self.cover_label.setFixedHeight(200)
+            self.cover_label.setText("No cover")
+            return
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Error displaying cover image: {e}")
             return
