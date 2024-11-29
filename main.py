@@ -1264,6 +1264,9 @@ class CoverWindow(QDialog):
         layout.addLayout(button_layout)
         self.setLayout(layout)
 
+        # edit 2024.11.29
+        self.picdata = None
+
         self.showCoverImage(self.flac_path)
         self.save_button.clicked.connect(self.saveTags)
         self.cancel_button.clicked.connect(self.close)
@@ -1285,8 +1288,7 @@ class CoverWindow(QDialog):
 
         # Install event filter on the image component
         self.cover_label.installEventFilter(self)
-        # edit 2024.11.21
-        self.picdata = None
+
 
     def eventFilter(self, source, event):
         """Event filter function to capture right-click events on the image component and display the context menu."""
@@ -1376,7 +1378,7 @@ class CoverWindow(QDialog):
             self.cover_label.clear()
             # edit 2024.11.21
             self.cover_label.setFixedHeight(200)
-            self.cover_label.setText("No cover")
+            self.cover_label.setText("No cover") #TODO: 优化显示逻辑，即多选有封面和没封面的
             return
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Error displaying cover image: {e}")
